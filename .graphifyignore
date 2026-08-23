@@ -1,0 +1,17 @@
+# Exercise media fetched from the upstream dataset — 2,648 binary files, zero structure.
+media
+assets
+# Native shells: generated Capacitor scaffolding, icons, splash screens.
+frontend/android
+frontend/ios
+# Generated / mechanical data files: one 888 KB exercise dataset and 20 string-map packs.
+exercises-data.js
+frontend/src/locales
+frontend/src/instr
+# Runtime state and secrets (db.json, session key, VAPID keys).
+data
+# graphify's own output.
+graphify-out
+# Editor / OS noise.
+.DS_Store
+.claude-flow

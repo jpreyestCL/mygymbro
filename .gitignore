@@ -1,0 +1,13 @@
+# graphify knowledge graph — derived from the code, rebuilt by the post-commit hook.
+# Regenerate from scratch with: graphify extract . --code-only && graphify cluster-only .
+graphify-out/
+
+# Build output and dependencies
+node_modules/
+dist/
+
+# Agent tooling: machine-specific absolute paths, not shareable
+.claude/
+.claude-flow/
+
+.DS_Store
