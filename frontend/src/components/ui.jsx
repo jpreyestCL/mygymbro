@@ -103,6 +103,9 @@ export function Segmented({ options, value, onChange, className = '' }) {
           key={o.value}
           className={o.value === value ? 'on' : ''}
           aria-pressed={o.value === value}
+          // icon-only options have nothing else to announce, and a label rendered in a span
+          // is not always picked up as the button's name
+          aria-label={o.label || o.value}
           onClick={() => onChange(o.value)}
         >
           {o.icon && <Icon name={o.icon} />}

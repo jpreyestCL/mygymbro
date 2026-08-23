@@ -99,7 +99,7 @@ export default function Settings() {
     {!user && !DEMO && !MOBILE && <p className="sect-f" style={{ marginTop: -18, marginBottom: 22 }}>{t('Guest mode — data lives only in this browser.')}</p>}
 
     {/* ---------- general ---------- */}
-    <Section title={t('General')} footer={t('Note: switching units only changes the label — logged numbers are not converted.')}>
+    <Section title={t('General')} footer={t('Switching units keeps your logged sets at the weight you lifted — history is shown converted. Routine targets and body weight are plain numbers and are not converted.')}>
       <SelectRow
         icon="globe" iconTint="var(--blue)" title={t('Language')}
         value={S.lang || 'en'} onChange={v => update(s => { s.lang = v })}
@@ -111,7 +111,19 @@ export default function Settings() {
       <Row icon="scale" iconTint="var(--teal)" title={t('Weight unit')}>
         <Segmented className="seg-inline"
           options={[{ value: 'kg', label: 'kg' }, { value: 'lb', label: 'lb' }]}
-          value={S.unit} onChange={v => update(s => { s.unit = v })} />
+          value={S.unit} onChange={v => update(s => {
+            // A set with no unit of its own means "the profile's". Change the profile's
+            // without saying so and every set ever logged silently becomes a different
+            // weight. Stamp the old unit on them first, then switch: the numbers on screen
+            // change, the loads they describe do not.
+            if (v !== s.unit) {
+              const was = s.unit
+              s.workouts.forEach(w => w.entries.forEach(e => e.sets.forEach(set => {
+                if (set.w !== undefined && !set.u) set.u = was
+              })))
+            }
+            s.unit = v
+          })} />
       </Row>
     </Section>
 

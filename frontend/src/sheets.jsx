@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
-import { EXDB, EXIDX, BODYPARTS, isCardio, isBodyweightEq, allExercises, equipmentOf } from './lib/exercises.js'
+import { EXDB, EXIDX, BODYPARTS, isCardio, isBodyweightEq, allExercises, equipmentOf, exOr } from './lib/exercises.js'
 import { fmtDate, fmtNum, fmtVol, fmtDur, durPart, todayISO, uid, exCount, DAYN, MONTHS_LONG, ACCENTS } from './lib/format.js'
-import { lastEntryFor, bestWeightFor, buildSets, effectiveRoutineId, workoutVolume, setsDone, setsDoneActive, lastBW, supersetUnits, unitOf, setLabel, defaultConfig, cleanupSg, modeOf, effortOf, isBw, isPerSide, sideReps } from './lib/history.js'
+import { lastEntryFor, bestWeightFor, buildSets, effectiveRoutineId, workoutVolume, setsDone, setsDoneActive, lastBW, supersetUnits, unitOf, setLabel, setLabelIn, defaultConfig, cleanupSg, modeOf, effortOf, isBw, isPerSide, sideReps } from './lib/history.js'
 import { beep, vibrate } from './lib/sound.js'
 import { t, instrFor, getLang, INSTR_LANGS } from './lib/i18n.js'
 import { nav } from './lib/nav.js'
@@ -17,7 +17,8 @@ import BodyMap from './components/BodyMap.jsx'
 import { loadOfWorkouts } from './lib/muscles.js'
 import { parseImport, mergeImport } from './lib/import-csv.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-share.js'
-import { estimate1RM, best1RM, is1RMRecord, REP_CAP } from './lib/onerm.js'
+import { estimate1RM, best1RM, bestSetOf, is1RMRecord, REP_CAP } from './lib/onerm.js'
+import { unitForEx, convert } from './lib/units.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS } from './lib/progression.js'
 import { MOBILE, shareExport } from './lib/mobile.js'
 
@@ -305,6 +306,57 @@ function ExerciseDetail({ ex, close }) {
   </>
 }
 export const exerciseDetailSheet = ex => ui().openSheet(close => <ExerciseDetail ex={ex} close={close} />)
+
+/* ======================= per-exercise history ======================= */
+/**
+ * Every past session of one lift, newest first — the thing you actually want mid-set when
+ * deciding what to load, and which used to mean leaving the workout for the History tab.
+ *
+ * Sets are shown in the unit this exercise is logged in, converted from whatever unit each
+ * set was recorded in: a bar you once loaded in lb reads in kg here if that is what the
+ * screen is speaking. The estimate underneath is computed from the normalised load, so a
+ * mixed history produces one comparable line rather than a sawtooth.
+ */
+function ExerciseHistory({ exId, close }) {
+  const st = useStore(s => s.S)
+  const ex = exOr(exId)
+  const unit = unitForEx(st, exId)
+  const sessions = []
+  for (let i = st.workouts.length - 1; i >= 0; i--) {
+    const w = st.workouts[i]
+    const entry = w.entries.find(e => e.id === exId)
+    if (!entry) continue
+    const done = entry.sets.filter(x => x.done)
+    if (!done.length) continue
+    sessions.push({ d: w.d, name: w.name, sets: done, target: entry.target, est: bestSetOf(entry, undefined, st) })
+  }
+  const best = best1RM(st, exId)
+  return <>
+    <h3 className="capitalize">{ex.n}</h3>
+    {!sessions.length
+      ? <div className="empty"><div className="ico"><Icon name="chart" /></div>{t('No sessions logged yet.')}</div>
+      : <>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '4px 0 12px' }}>
+          <span className="tag nocap">{t('{0} sessions', sessions.length)}</span>
+          {/* named once, here, rather than trailing every line of sets */}
+          <span className="tag nocap">{unit}</span>
+          {best && <span className="tag acc nocap"><Icon name="trophy" />{t('Best est. 1RM')} {fmtNum(convert(best.est, st.unit, unit))} {unit}</span>}
+        </div>
+        <div className="list">
+          {sessions.map((s, i) => <div key={i} className="item col">
+            <div className="row between" style={{ width: '100%' }}>
+              <div className="tt">{fmtDate(s.d)}</div>
+              {s.est && <div className="ss nocap">{t('est.')} {fmtNum(convert(s.est.est, st.unit, unit))} {unit}</div>}
+            </div>
+            <div className="ss nocap" style={{ width: '100%' }}>
+              {s.sets.map(x => setLabelIn(st, exId, x, s.target, unit)).join(' · ')}
+            </div>
+          </div>)}
+        </div>
+      </>}
+  </>
+}
+export const exerciseHistorySheet = exId => ui().openSheet(close => <ExerciseHistory exId={exId} close={close} />)
 
 /* ============================ add to routine ============================ */
 function AddToRoutine({ ex, close }) {
@@ -954,7 +1006,7 @@ function doFinishWorkout() {
     entries: A.entries.map(e => ({ id: e.id, sets: e.sets, topW: e.topW || null, target: e.target || null })).filter(e => e.sets.some(s => s.done)),
     prs
   }
-  w.vol = workoutVolume(w)
+  w.vol = workoutVolume(w, st)
   update(s => {
     w.entries.forEach(e => {
       const mx = Math.max(0, ...e.sets.filter(x => x.done).map(x => x.w || 0), e.topW || 0)

@@ -17,6 +17,7 @@
 // So a session that fell apart can never advance the load as though it had succeeded.
 
 import { modeOf, repStep } from './history.js'
+import { wBase, unitForEx, baseUnit, convert } from './units.js'
 import { EXIDX } from './exercises.js'
 
 export const POLICIES = ['off', 'linear', 'greyskull', 'double', 'time']
@@ -98,7 +99,10 @@ function deloadTo(cur, step) {
  * entry without its own target is judged against `fallback`, the exercise's current plan,
  * which is exactly what the app's old weight hint compared against.
  */
-export function readSession(entry, fallback) {
+// `S` is optional: without it a set's weight is read as the bare number it always was.
+// With it, a session logged in lb is read in the profile's unit, so a policy never
+// compares 135 lb against 60 kg and calls it a 75-unit jump.
+export function readSession(entry, fallback, S) {
   const target = (entry && entry.target) || fallback || {}
   const mode = modeOf({ ...target, id: entry && entry.id })
   const sets = (entry && entry.sets) || []
@@ -110,7 +114,7 @@ export function readSession(entry, fallback) {
     const held = sets.map(s => (s.done ? (s.sec || 0) : 0))
     return {
       mode, goal, held,
-      weight: Math.max(0, ...sets.filter(s => s.done).map(s => s.w || 0)),
+      weight: Math.max(0, ...sets.filter(s => s.done).map(s => (S ? wBase(S, s) : (s.w || 0)))),
       best: Math.max(0, ...held),
       ok: goal > 0 && enough && held.length > 0 && held.every(h => h >= goal)
     }
@@ -119,7 +123,7 @@ export function readSession(entry, fallback) {
   const reps = sets.map(s => (s.done ? (s.r || 0) : 0))
   return {
     mode, goal, reps,
-    weight: Math.max(0, ...sets.filter(s => s.done).map(s => s.w || 0)),
+    weight: Math.max(0, ...sets.filter(s => s.done).map(s => (S ? wBase(S, s) : (s.w || 0)))),
     count: reps.length,                                   // the dimension bodyweight work grows (#33)
     low: reps.length ? Math.min(...reps) : 0,
     amrap: reps.length ? reps[reps.length - 1] : 0,       // Greyskull's final set
@@ -132,7 +136,7 @@ export function sessionsFor(S, exId, fallback) {
   const out = []
   ;(S.workouts || []).forEach(w => {
     const entry = w.entries.find(e => e.id === exId)
-    if (entry && entry.sets.some(s => s.done)) out.push({ d: w.d, ...readSession(entry, fallback) })
+    if (entry && entry.sets.some(s => s.done)) out.push({ d: w.d, ...readSession(entry, fallback, S) })
   })
   return out
 }
@@ -158,11 +162,17 @@ export function stallCount(sessions) {
 export function nextPrescription(S, cfg, routine) {
   const mode = modeOf(cfg)
   const policy = policyFor(cfg, routine, mode)
-  const unit = S.unit || 'kg'
+  // The whole prescription is computed in the unit this exercise is LOGGED in, not the
+  // profile's: `weight` here lands straight in the set rows, and a jump named "2.5 kg" next
+  // to a column headed "lb" is not a wording problem, it is the wrong number.
+  const unit = unitForEx(S, cfg.id)
   const inc = cfg.inc > 0 ? cfg.inc : (mode === 'time' ? DEFAULT_SEC_INCREMENT : defaultIncrement(cfg.id, unit))
   if (policy === 'off') return { policy, kind: 'off' }
 
+  // sessionsFor reports weights in the profile's unit so sessions stay comparable; bring
+  // them into this exercise's unit before any policy does arithmetic on them.
   const sessions = sessionsFor(S, cfg.id, cfg).filter(s => s.mode === mode)
+    .map(x => (x.weight ? { ...x, weight: convert(x.weight, baseUnit(S), unit) } : x))
   const last = sessions[sessions.length - 1]
   if (!last) return { policy, kind: 'first', why: ['Nothing logged yet — this session sets the baseline.'] }
 

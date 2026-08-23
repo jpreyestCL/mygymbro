@@ -462,6 +462,14 @@ h4.sec{
 .seg-range{margin-bottom:10px}
 .seg-inline button{padding:5px 10px;font-size:13px;min-height:28px}
 .seg-inline button .icn{font-size:14px}
+/* the kg/lb switch on a workout row sits in a line of tags, so it matches their height */
+.seg-xs{min-width:78px}
+.seg-xs button{padding:3px 8px;font-size:12px;min-height:24px}
+/* a tag that is also a button — same chip, plus a press state */
+button.tag{border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:500}
+button.tag:active{background:var(--surface-3,var(--surface-2));opacity:.75}
+/* a list row that stacks its two lines instead of sitting them side by side */
+.item.col{flex-direction:column;align-items:flex-start;gap:2px}
 
 /* native time input, restyled to sit in a row like a value label */
 .timef{

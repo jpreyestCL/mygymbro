@@ -11,6 +11,8 @@
 
 // Above this many reps an estimate says more about work capacity than about maximal strength,
 // and the formulas disagree by double digits. Refusing to guess beats printing a fantasy.
+import { wBase } from './units.js'
+
 export const REP_CAP = 12
 
 export const FORMULAS = {
@@ -41,12 +43,15 @@ export function estimate1RM(w, r, formula = DEFAULT_FORMULA) {
 // Best estimate out of one workout entry's completed sets.
 // `topW` is ignored on purpose: it records the working weight a user confirmed after the
 // exercise, with no rep count attached, so it cannot produce an estimate.
-export function bestSetOf(entry, formula = DEFAULT_FORMULA) {
+// `S` is optional; pass it and a set logged in lb is estimated in the profile's unit, so a
+// trend line built from a mixed history is a line and not a sawtooth.
+export function bestSetOf(entry, formula = DEFAULT_FORMULA, S) {
   let best = null
   ;(entry?.sets || []).forEach(s => {
     if (!s.done) return
-    const est = estimate1RM(s.w, s.r, formula)
-    if (est !== null && (!best || est > best.est)) best = { est, w: Number(s.w), r: Math.round(Number(s.r)) }
+    const w = S ? wBase(S, s) : Number(s.w)
+    const est = estimate1RM(w, s.r, formula)
+    if (est !== null && (!best || est > best.est)) best = { est, w, r: Math.round(Number(s.r)) }
   })
   return best
 }
@@ -58,7 +63,7 @@ export function e1rmSeries(S, exId, formula = DEFAULT_FORMULA) {
   ;(S.workouts || []).forEach(w => {
     const entry = w.entries.find(e => e.id === exId)
     if (!entry) return
-    const best = bestSetOf(entry, formula)
+    const best = bestSetOf(entry, formula, S)
     if (best) pts.push({ t: w.start, d: w.d, y: best.est, w: best.w, r: best.r })
   })
   return pts
@@ -75,7 +80,7 @@ export function best1RM(S, exId, formula = DEFAULT_FORMULA) {
 // Did this workout beat every estimate that came before it? Used for the finish summary,
 // so it compares against history that does not yet contain `w`.
 export function is1RMRecord(S, exId, entry, formula = DEFAULT_FORMULA) {
-  const now = bestSetOf(entry, formula)
+  const now = bestSetOf(entry, formula, S)
   if (!now) return null
   const prev = best1RM(S, exId, formula)
   return !prev || now.est > prev.est ? { ...now, prev: prev ? prev.est : 0 } : null

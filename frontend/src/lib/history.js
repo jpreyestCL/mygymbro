@@ -1,6 +1,7 @@
 // Pure helpers over the state object S (ported 1:1 from the vanilla app).
 import { todayISO, isoOf, weekKey, fmtNum } from './format.js'
 import { isCardio, isBodyweightEq } from './exercises.js'
+import { wBase, wIn, unitForEx, baseUnit } from './units.js'
 import { t } from './i18n.js'
 
 // How an exercise is logged (issue #16). This used to be derived from the body part alone,
@@ -107,6 +108,19 @@ export function setLabel(id, s, cfg) {
   }
   return `${fmtNum(s.w || 0)}×${reps}` + effortTail(s)
 }
+// A weight already normalised to the profile's unit, expressed in `to`.
+const convertFromBase = (S, w, to) => wIn(S, { w, u: baseUnit(S) }, to)
+
+/**
+ * setLabel, but reading the set in `unit` — "135 x 5" logged in lb shows as "61.2 x 5" on a
+ * kg screen. The unit itself is named by the caller (a column header, a chip), not repeated
+ * on every set, which is how the rest of the app already writes these lines.
+ */
+export function setLabelIn(S, id, s, cfg, unit) {
+  const u = unit || unitForEx(S, id)
+  return setLabel(id, s.w !== undefined ? { ...s, w: wIn(S, s, u), u } : s, cfg)
+}
+
 // Default config for a freshly added exercise.
 export function defaultConfig(id, mode) {
   const m = mode || modeOf({ id })
@@ -148,12 +162,17 @@ export function lastEntryFor(S, exId) {
   }
   return null
 }
+// Returns the best in the PROFILE's unit, so it can be compared with any other set in the
+// app. Callers showing it on an exercise screen convert it to that exercise's unit.
 export function bestWeightFor(S, exId) {
   let best = 0
   S.workouts.forEach(w => w.entries.forEach(e => {
     if (e.id === exId) {
-      e.sets.forEach(s => { if (s.done && s.w > best) best = s.w })
-      if (e.topW && e.topW > best) best = e.topW
+      // topW has no unit of its own — it was confirmed alongside the sets, so it reads in
+      // whatever unit the entry was logged in.
+      const u = e.sets.find(x => x.u)?.u
+      e.sets.forEach(s => { const v = wBase(S, s); if (s.done && v > best) best = v })
+      if (e.topW) { const v = wBase(S, { w: e.topW, u }); if (v > best) best = v }
     }
   }))
   return best
@@ -190,24 +209,39 @@ export function buildSets(S, cfg) {
       // exercise from reps to time must not seed the duration from a rep count.
       const prev = prevAt(i)
       const carried = prev && prev.sec > 0 ? prev : null
-      sets.push({ sec: carried ? carried.sec : (cfg.sec || 45), w: carried ? (carried.w || 0) : (cfg.weight || 0), done: false })
+      const to = unitForEx(S, cfg.id)
+      const wBaseVal = carried ? wBase(S, carried) : (cfg.weight || 0)
+      const set = { sec: carried ? carried.sec : (cfg.sec || 45), w: convertFromBase(S, wBaseVal, to), done: false }
+      if (to !== baseUnit(S)) set.u = to
+      sets.push(set)
     }
     return sets
   }
   const conf = S.exWeights[cfg.id]
+  // Everything that can seed a weight is in the profile's unit except the previous set,
+  // which is in whatever unit it was logged in — normalise, then hand the row back in the
+  // unit this exercise is logged in, so the number matches the label above it.
+  const to = unitForEx(S, cfg.id)
   for (let i = 0; i < n; i++) {
     const prev = prevAt(i)
     const usable = prev && prev.r > 0 ? prev : null
-    const w = conf && conf.w > 0 ? conf.w : (usable ? usable.w : cfg.weight)
-    sets.push({ w, r: usable ? usable.r : cfg.reps, done: false })
+    const base = conf && conf.w > 0 ? conf.w : (usable ? wBase(S, usable) : cfg.weight)
+    const set = { w: convertFromBase(S, base, to), r: usable ? usable.r : cfg.reps, done: false }
+    if (to !== baseUnit(S)) set.u = to
+    sets.push(set)
   }
   return sets
 }
-export function workoutVolume(w) {
+// `S` is optional only so the pre-units call sites keep working; pass it whenever you have
+// it. Without it a set logged in lb is added to a kg total as a bare number, which is how
+// you get a session that claims twice the tonnage it moved.
+export function workoutVolume(w, S) {
   let v = 0
   // No special case for unilateral work: a per-side set logs its total, so both sides are
   // already in the rep count that arrives here.
-  w.entries.forEach(e => e.sets.forEach(s => { if (s.done) v += (s.w || 0) * (s.r || 0) }))
+  w.entries.forEach(e => e.sets.forEach(s => {
+    if (s.done) v += (S ? wBase(S, s) : (s.w || 0)) * (s.r || 0)
+  }))
   return v
 }
 export function setsDone(w) {
