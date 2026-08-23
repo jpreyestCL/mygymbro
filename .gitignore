@@ -11,3 +11,4 @@ dist/
 .claude-flow/
 
 .DS_Store
+api/node_modules/

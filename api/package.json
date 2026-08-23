@@ -9,7 +9,10 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@better-auth/passkey": "^1.7.1",
     "@simplewebauthn/server": "^13.1.1",
+    "better-auth": "^1.7.1",
+    "pg": "^8.23.0",
     "web-push": "^3.6.7"
   }
 }
