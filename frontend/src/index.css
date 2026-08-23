@@ -336,6 +336,45 @@ h4.sec{
   justify-content:center;margin:2px auto;
 }
 
+/* ---- week / month / year strip ---- */
+/* The label doubles as "back to today" once you have stepped away; at offset 0 there is
+   nowhere to go, so it is disabled and reads as plain text rather than a dead button. */
+.periodlbl{
+  background:none;border:0;font:inherit;font-size:13px;font-weight:500;
+  color:var(--label-2);padding:4px 8px;border-radius:8px;cursor:pointer;
+}
+.periodlbl:disabled{cursor:default;color:var(--label-3)}
+.periodlbl:not(:disabled):active{background:var(--surface-2)}
+.seg-period{width:100%;min-width:0;margin-bottom:10px}
+
+/* Month: same day cells as the week, on a 7-column grid. */
+.mhead{margin-bottom:2px}
+.mhead .lbl{
+  flex:1;text-align:center;font-size:11px;color:var(--label-3);font-weight:500;
+  text-transform:uppercase;letter-spacing:.03em;
+}
+.mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.mgrid .wday{padding:5px 0 6px}
+.mgrid .wday .num{font-size:15px;margin:2px 0}
+.mgrid .wday.today .num{width:27px;height:27px;margin:0 auto}
+/* Days spilling in from the neighbouring month: present so the columns line up, dimmed so
+   they are not mistaken for this month's. */
+.mgrid .wday.out{opacity:.32}
+
+/* Year: twelve months, shaded by how much training each one holds. */
+.ygrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.ymon{
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:10px 4px;border-radius:10px;border:1px solid var(--separator,transparent);
+  background:color-mix(in srgb,var(--acc) calc(var(--fill) * 26%),var(--surface-2));
+  font:inherit;cursor:pointer;transition:background var(--fast);
+}
+.ymon:active{background:var(--surface-3,var(--surface-2))}
+.ymon .mn{font-size:12px;color:var(--label-2);font-weight:500;text-transform:uppercase;letter-spacing:.03em}
+.ymon .cnt{font-size:18px;font-weight:600;letter-spacing:-.015em}
+.ymon:not(.has) .cnt{color:var(--label-3);font-weight:400}
+.ymon.today{border-color:var(--acc)}
+
 /* ----------------------------------------------------------------- list -- */
 .list{display:flex;flex-direction:column;gap:8px}
 .item{

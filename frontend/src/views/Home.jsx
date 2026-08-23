@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { effectiveRoutine, effectiveRoutineId, streakWeeks, lastBW, setsDoneActive } from '../lib/history.js'
-import { fmtNum, fmtDate, todayISO, isoOf, weekKey, DAYS } from '../lib/format.js'
+import { fmtNum, fmtDate, todayISO, isoOf, weekKey, DAYS, MONTHS, MONTHS_LONG } from '../lib/format.js'
+import { PERIODS, weekDays, monthGrid, yearMonths, periodLabel } from '../lib/calendar.js'
 import { t, dateLocale } from '../lib/i18n.js'
 import { bwSheet, goalSheet, dayOverrideSheet, calendarSheet, startFlow, loadStarterPlan, bwDeltaColor } from '../sheets.jsx'
 import LineChart from '../components/LineChart.jsx'
 import Icon from '../components/Icon.jsx'
-import { Button } from '../components/ui.jsx'
+import { Button, Segmented } from '../components/ui.jsx'
 import { glyphOf } from '../lib/glyphs.js'
 
 // Home = what to do now + a quick glance. Deep charts & history live in Stats.
@@ -15,7 +16,13 @@ export default function Home() {
   const nav = useNavigate()
   const S = useStore(s => s.S)
   const user = useStore(s => s.user)
-  const [weekOffset, setWeekOffset] = useState(0)
+  // The strip shows one period at a time and steps through it. Changing period resets the
+  // offset: "two months back" has no meaning once you switch to years, and landing on a
+  // random year is worse than landing on this one.
+  const [period, setPeriod] = useState('week')
+  const [offset, setOffset] = useState(0)
+  const step = d => setOffset(o => o + d)
+  const switchTo = p => { setPeriod(p); setOffset(0) }
 
   const today = new Date()
   const routine = effectiveRoutine(S, todayISO())
@@ -24,19 +31,37 @@ export default function Home() {
   const prevBW = S.bodyweight.length > 1 ? S.bodyweight[S.bodyweight.length - 2] : null
   const delta = bw && prevBW ? bw.w - prevBW.w : null
 
-  const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7) + weekOffset * 7)
   const doneDays = new Set(S.workouts.map(w => w.d))
-  const strip = []
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday); d.setDate(monday.getDate() + i)
-    const iso = isoOf(d)
-    const eff = effectiveRoutineId(S, iso), ovr = S.dayPlan[iso] !== undefined, done = doneDays.has(iso)
-    const dot = done ? ' done' : ovr && eff ? ' ovr' : eff ? ' plan' : ''
-    strip.push(<div key={i} className={'wday' + (iso === todayISO() ? ' today' : '')} onClick={() => dayOverrideSheet(iso)}>
-      <div className="lbl">{t(DAYS[d.getDay()])}</div><div className="num">{d.getDate()}</div><div className={'dot' + dot} /></div>)
+  // One dot per day, meaning the same thing in the week and the month grid: trained, moved
+  // here from another day, or planned.
+  const dotFor = iso => {
+    const eff = effectiveRoutineId(S, iso)
+    return doneDays.has(iso) ? ' done' : S.dayPlan[iso] !== undefined && eff ? ' ovr' : eff ? ' plan' : ''
   }
-  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6)
-  const wkLabel = weekOffset === 0 ? t('This week') : `${monday.getDate()} ${monday.toLocaleDateString(dateLocale(), { month: 'short' })} – ${sunday.getDate()} ${sunday.toLocaleDateString(dateLocale(), { month: 'short' })}`
+  const dayCell = (iso, label, num, extra = '') =>
+    <div key={iso + extra} className={'wday' + (iso === todayISO() ? ' today' : '') + extra}
+      role="button" tabIndex={0} aria-label={fmtDate(iso)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dayOverrideSheet(iso) } }}
+      onClick={() => dayOverrideSheet(iso)}>
+      {label !== null && <div className="lbl">{label}</div>}
+      <div className="num">{num}</div><div className={'dot' + dotFor(iso)} />
+    </div>
+
+  const strip = weekDays(today, offset).map(d => dayCell(d.iso, t(DAYS[d.dow]), d.day))
+
+  const grid = monthGrid(today, offset)
+  const monthCells = grid.days.map(d => dayCell(d.iso, null, d.day, d.out ? ' out' : ''))
+
+  // A year is twelve months, each showing how many sessions it holds — a heatmap of 365
+  // squares is what Stats is for, and does not survive a phone's width. Tapping a month
+  // opens it, so the arrows and the drill-down agree on what "next" means.
+  const monthCounts = yearMonths(today, offset).map(m => ({
+    ...m, n: S.workouts.filter(w => w.d >= m.from && w.d <= m.to).length,
+  }))
+  const busiest = Math.max(1, ...monthCounts.map(m => m.n))
+  const thisMonthKey = todayISO().slice(0, 7)
+
+  const label = periodLabel(period, today, offset, t, dateLocale())
 
   const wThisWeek = S.workouts.filter(w => weekKey(w.d) === weekKey(todayISO())).length
   const plannedPerWeek = Object.keys(S.week).filter(k => S.week[k]).length
@@ -53,11 +78,28 @@ export default function Home() {
 
     <div className="card">
       <div className="row between" style={{ marginBottom: 8 }}>
-        <button className="iconbtn" style={{ width: 30, height: 30, fontSize: 15 }} onClick={() => setWeekOffset(w => w - 1)} aria-label="Previous week"><Icon name="chevronLeft" /></button>
-        <div className="small muted" style={{ fontWeight: 500 }}>{wkLabel}</div>
-        <button className="iconbtn" style={{ width: 30, height: 30, fontSize: 15 }} onClick={() => setWeekOffset(w => w + 1)} aria-label="Next week"><Icon name="chevronRight" /></button>
+        <button className="iconbtn" style={{ width: 30, height: 30, fontSize: 15 }} onClick={() => step(-1)} aria-label={t('Previous')}><Icon name="chevronLeft" /></button>
+        <button className="periodlbl" onClick={() => setOffset(0)} disabled={offset === 0}
+          title={offset === 0 ? undefined : t('Back to today')}>{label}</button>
+        <button className="iconbtn" style={{ width: 30, height: 30, fontSize: 15 }} onClick={() => step(1)} aria-label={t('Next')}><Icon name="chevronRight" /></button>
       </div>
-      <div className="week">{strip}</div>
+      <Segmented className="seg-inline seg-period" options={PERIODS.map(p => ({ value: p, label: t(p === 'week' ? 'Week' : p === 'month' ? 'Month' : 'Year') }))}
+        value={period} onChange={switchTo} />
+      {period === 'week' && <div className="week">{strip}</div>}
+      {period === 'month' && <>
+        <div className="week mhead">{DAYS.slice(1).concat(DAYS[0]).map(d => <div key={d} className="lbl">{t(d)}</div>)}</div>
+        <div className="mgrid">{monthCells}</div>
+      </>}
+      {period === 'year' && <div className="ygrid">
+        {monthCounts.map(m => <button key={m.month}
+          className={'ymon' + (m.n ? ' has' : '') + (`${m.year}-${String(m.month + 1).padStart(2, '0')}` === thisMonthKey ? ' today' : '')}
+          style={{ '--fill': m.n / busiest }}
+          aria-label={`${t(MONTHS_LONG[m.month])} ${m.year} — ${t(m.n === 1 ? '{0} workout total' : '{0} workouts total', m.n)}`}
+          onClick={() => { setPeriod('month'); setOffset((m.year - today.getFullYear()) * 12 + m.month - today.getMonth()) }}>
+          <span className="mn">{t(MONTHS[m.month])}</span>
+          <span className="cnt">{m.n || '—'}</span>
+        </button>)}
+      </div>}
       <div className="today-row" onClick={onToday}>
         <div className="row" style={{ gap: 9, minWidth: 0 }}>
           <span className="lrow-i" style={{ background: S.active ? 'var(--orange)' : routine ? 'var(--acc)' : 'var(--surface-3)' }}>
