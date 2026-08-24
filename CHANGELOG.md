@@ -1,5 +1,83 @@
 # Changelog
 
+## v1.2.9 — 2026-08-24
+
+This release closes the gap with upstream openGym, which had moved five versions ahead while this
+fork went its own way on units, identity and a native iOS app. Everything that touches a weight is
+adapted rather than copied: upstream has one unit per profile, this fork stores the unit each set
+was logged in, and a straight copy would have quietly broken that.
+
+### The muscle map, read as recovery and as strength
+
+The Muscle balance card now holds three readings of the same body, behind a view switcher. The
+muscle you tap stays selected when you switch, because reading one muscle three ways is the whole
+reason they share a card.
+
+- 🔥 **Fatigue.** How recently each muscle was trained, weighted by how hard. A 36-hour half-life,
+  saturating rather than pinning, with each session scored against the reference left by earlier
+  sessions — so importing an old history or deleting a workout cannot inflate today's reading.
+  Red means rest it.
+- 💪 **Strength.** What is still there. Full for fourteen days after a session, then decaying with
+  a 28-day half-life toward a floor. Tap a muscle for its exercises, each with its own decay and
+  estimated 1RM, because an old exercise declines even when its muscle is kept fresh by other work.
+- The colour bands here are absolute, unlike the balance map's. "Is my training even" only means
+  something as a comparison inside one window; "what shape is this muscle in" must not change
+  because some other muscle happened to be trained harder that week.
+
+### Ask an AI about your training, without the data leaving your box
+
+A new `mcp/` server: eight read-only tools that let Claude Desktop, Cursor or any MCP client read
+your routines, workouts, weigh-ins, estimated 1RMs and muscle balance. The numbers come from the
+same functions the Stats screen uses, so the answers match what the app shows.
+
+Two ways to point it at a profile: **local**, reading the state files off the disk, and **remote**,
+reading the deployed instance over HTTPS with a bearer token. The remote mode adds no new server
+route — it uses the endpoint the web client already syncs against.
+
+Every weight it hands over is converted to your profile's unit first, and every answer names that
+unit. An LLM cannot see that one set was logged in pounds and will happily average 100 kg with
+225 lb into "162.5".
+
+### In a session
+
+- 🔗 **Superset any two exercises mid-workout**, and unpair them again. A superset rests once the
+  round is through both exercises, not between them.
+- **Warm-up sets**, numbered separately from working sets, and excluded from your 1RM estimates —
+  a light set at high reps can otherwise out-estimate the working set it was warming up for.
+- **Changing a weight carries forward** to the following sets of the same kind, instead of being
+  retyped on every row.
+- **A freestyle session starts where you left off**, from the last target you actually trained
+  rather than generic defaults.
+- **Remove an exercise** from a session you already started.
+- Re-ticking a set you had already finished no longer restarts the rest timer or jumps the screen.
+- On Android, the system back gesture now closes a sheet, then a page, and asks again before
+  leaving the app.
+
+### An activity log for the admin dashboard
+
+If you run this for other people, you had no way to answer "who signed in, and when?". Now there
+is a card for it: sign-ins, sign-outs, the attempts that failed, passkey and recovery-address
+changes, and every admin action. On by default, because it records strictly less than the instance
+already holds.
+
+IP addresses are the exception and are **off** unless you ask for them (`AUDIT_IP`) — they are the
+one field that says where somebody physically is. A failed sign-in records the status code, never
+the address someone typed. Clearing the log is itself logged and the counter is not reset, so a
+clear leaves a visible gap rather than a clean slate.
+
+### Fixes
+
+- Rows now train the rear deltoids: four row variants were missing them, so the muscle map read
+  as if pulling never touched the back of the shoulder.
+- The muscle map no longer rewrites the exercise catalogue as a side effect of reading it.
+- Exercise images and animations loaded from the wrong path on plan-sharing URLs, showing nothing
+  and reporting nothing.
+- `ALLOW_GUEST=0` hides the "Continue without account" entrance for an instance where every
+  profile should be a real account. Deliberately asymmetric: a client that cannot reach the server
+  is still shown the entrance, because "no answer" must not read as "guests are disabled".
+- Opening a sheet now adds a history entry, so the browser back button closes it instead of
+  leaving the page.
+
 ## v1.2.4 — 2026-08-01
 
 The effort ratings you have been recording since v1.2.3 now answer questions, and bodyweight
