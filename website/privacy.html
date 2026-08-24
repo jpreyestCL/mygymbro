@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Workset — Privacy Policy</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 6rem; }
+  h1 { font-size: 2rem; letter-spacing: -.02em; margin-bottom: .25rem; }
+  h2 { font-size: 1.15rem; margin-top: 2.25rem; }
+  .updated { opacity: .6; font-size: .9rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid rgba(128,128,128,.3); vertical-align: top; }
+  code { font-size: .9em; }
+</style>
+</head>
+<body>
+<h1>Workset — Privacy Policy</h1>
+<p class="updated">Last updated: 23 August 2026</p>
+
+<p>Workset is a training log. It records what you lift and what you weigh, and it syncs that
+between your own devices. This page says exactly what is stored, where, and who can see it.
+There is no analytics SDK, no advertising, no tracking, and nothing is sold or shared with
+third parties.</p>
+
+<h2>What is collected</h2>
+<table>
+  <tr><th>Data</th><th>Why</th><th>Where it lives</th></tr>
+  <tr>
+    <td>A display name</td>
+    <td>So the app can greet you and tell profiles apart.</td>
+    <td>Our server</td>
+  </tr>
+  <tr>
+    <td>A passkey's public key</td>
+    <td>To sign you in. The private key never leaves your device — we cannot see it, and it
+        cannot be used to identify you elsewhere.</td>
+    <td>Our server</td>
+  </tr>
+  <tr>
+    <td>An email address <em>(optional)</em></td>
+    <td>Only so you can get back into your account if you lose your passkey. We do not send
+        newsletters or marketing.</td>
+    <td>Our server</td>
+  </tr>
+  <tr>
+    <td>Your training log: workouts, sets, weights, routines, body weight</td>
+    <td>It is the product. Without it the app has nothing to show you.</td>
+    <td>Our server, and on your device</td>
+  </tr>
+</table>
+
+<h2>Apple Health</h2>
+<p>If you allow it, Workset reads your <strong>body weight</strong> from Health so you do not
+have to retype what your scale already recorded, and writes the weigh-ins you log back to
+Health so your other apps see them.</p>
+<p>Body weight is the only data type requested. Workset never reads workouts, heart rate, or
+anything else from Health. Health data is used solely to show you your own history inside the
+app: it is never used for advertising or marketing, never sold, and never shared with third
+parties. You can revoke access at any time in the Health app, and Workset keeps working
+without it.</p>
+
+<h2>What is not collected</h2>
+<ul>
+  <li>No analytics, telemetry, crash-reporting SDK or advertising identifiers.</li>
+  <li>No location, contacts, photos, microphone or camera.</li>
+  <li>No passwords — sign-in is by passkey, so there is no password to store or leak.</li>
+  <li>No tracking across other apps or websites.</li>
+</ul>
+
+<h2>Who can see your data</h2>
+<p>Your training log is visible to you. Whoever operates the server can technically access the
+files on it, as with any hosted service; it is not read, mined, or handed to anyone else. If
+the instance you use has an administrator dashboard enabled, an administrator can see account
+names and training history for the accounts on that instance — the app tells you when this
+applies.</p>
+
+<h2>Where it is stored</h2>
+<p>On a server in Germany (Hetzner), and in the app on your device. Data is sent over HTTPS.
+Your passkey's private key stays in your device's secure hardware or your password manager and
+is never transmitted.</p>
+
+<h2>Deleting your data</h2>
+<p>You can export everything from Settings at any time. To delete your account and all of its
+training data, use the delete option in Settings, or email the address below — deletion
+removes the account, its passkeys, and its training log from the server, and cannot be undone.</p>
+
+<h2>Children</h2>
+<p>Workset is not directed at children under 13 and does not knowingly collect data from them.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes in a way that affects what is collected, the app will say so before
+the change takes effect.</p>
+
+<h2>Contact</h2>
+<p>Questions, or a deletion request: <a href="mailto:privacy@rlz.cl">privacy@rlz.cl</a></p>
+</body>
+</html>
