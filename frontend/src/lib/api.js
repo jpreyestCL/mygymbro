@@ -19,10 +19,18 @@ export const authToken = () => { try { return localStorage.getItem(TOKEN_KEY) } 
 const setAuthToken = t => { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY) } catch { /* */ } }
 export const clearAuthToken = () => setAuthToken(null)
 
+// The passkey challenge cookie can't cross the capacitor://localhost → server origin gap either,
+// so the server relays it in an x-passkey-challenge header instead. We hold it between the
+// options and verify calls of one ceremony and echo it back. In memory, not localStorage: it
+// lives for seconds and means nothing once the challenge is spent. Web builds keep their real
+// cookie, so the server ignores the echoed header there.
+let passkeyChallenge = null
+
 export async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
   const tok = authToken()
   if (tok) headers.Authorization = 'Bearer ' + tok
+  if (passkeyChallenge) headers['x-passkey-challenge'] = passkeyChallenge
   const r = await fetch(API_BASE + path, {
     ...opts,
     headers,
@@ -35,6 +43,9 @@ export async function api(path, opts = {}) {
   // shows up rather than only on the paths we expect to produce one.
   const fresh = r.headers.get('set-auth-token')
   if (fresh) setAuthToken(fresh)
+  // generate-options carries the relayed challenge; grab it so the matching verify can echo it.
+  const ch = r.headers.get('x-passkey-challenge')
+  if (ch) passkeyChallenge = ch
   const data = await r.json().catch(() => ({}))
   if (!r.ok) {
     // Better Auth reports failures as { message }, this server's own routes as { error }.
@@ -84,23 +95,27 @@ function credToJSON(cred) {
 export async function passkeyRegister(name, code) {
   const q = new URLSearchParams({ name })
   if (code) q.set('code', code)
-  const options = await api('/api/auth/passkey/generate-register-options?' + q)
-  const cred = await navigator.credentials.create({ publicKey: toCreationOptions(options) })
-  // createSession: registering IS signing up here, so the ceremony that creates the passkey
-  // is also the one that signs you in. Without it you would be registered and logged out.
-  const res = await api('/api/auth/passkey/verify-registration', {
-    method: 'POST',
-    body: JSON.stringify({ response: credToJSON(cred), name, createSession: true }),
-  })
-  return res.user || (await api('/api/me')).user
+  try {
+    const options = await api('/api/auth/passkey/generate-register-options?' + q)
+    const cred = await navigator.credentials.create({ publicKey: toCreationOptions(options) })
+    // createSession: registering IS signing up here, so the ceremony that creates the passkey
+    // is also the one that signs you in. Without it you would be registered and logged out.
+    const res = await api('/api/auth/passkey/verify-registration', {
+      method: 'POST',
+      body: JSON.stringify({ response: credToJSON(cred), name, createSession: true }),
+    })
+    return res.user || (await api('/api/me')).user
+  } finally { passkeyChallenge = null }   // spent, or abandoned — never echo it again
 }
 
 export async function passkeyLogin() {
-  const options = await api('/api/auth/passkey/generate-authenticate-options')
-  const cred = await navigator.credentials.get({ publicKey: toRequestOptions(options) })
-  const res = await api('/api/auth/passkey/verify-authentication', {
-    method: 'POST',
-    body: JSON.stringify({ response: credToJSON(cred) }),
-  })
-  return res.user || (await api('/api/me')).user
+  try {
+    const options = await api('/api/auth/passkey/generate-authenticate-options')
+    const cred = await navigator.credentials.get({ publicKey: toRequestOptions(options) })
+    const res = await api('/api/auth/passkey/verify-authentication', {
+      method: 'POST',
+      body: JSON.stringify({ response: credToJSON(cred) }),
+    })
+    return res.user || (await api('/api/me')).user
+  } finally { passkeyChallenge = null }
 }

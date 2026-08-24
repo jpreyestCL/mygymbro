@@ -678,6 +678,52 @@ startCadence({ users: coachUsers, userNow });
 // Better Auth serves everything under /api/auth (sign-up, sign-in, sessions, passkeys).
 const authHandler = toNodeHandler(auth);
 
+// Passkey challenge relay, for the native app only.
+//
+// Better Auth keeps the WebAuthn challenge in Postgres, keyed by a token it hands out in a
+// signed, SameSite=Lax cookie (`better-auth-passkey`) on generate-options and reads back on
+// verify. Same-origin web builds round-trip that cookie and never notice it. The native shell
+// is cross-origin — capacitor://localhost → https://mygym.rlz.cl — so the cookie is never sent
+// back on the verify POST and it fails with "Challenge not found": the very cookie-can't-cross-
+// origins problem the session already routes around with a bearer token, one call earlier in the
+// same ceremony. So relay the *opaque, already-signed* cookie through a channel the WebView can
+// use — a readable response header out, the header the client echoes back folded into Cookie in.
+// No secret is touched: this only carries a value the browser itself would have carried.
+const PASSKEY_CH_HEADER = 'x-passkey-challenge';
+
+// The challenge Set-Cookie as `name=value`, or null for anything else — its own deletion
+// included, which carries an empty value.
+function passkeyCookiePair(setCookie) {
+  for (const c of (Array.isArray(setCookie) ? setCookie : [setCookie])) {
+    const pair = String(c).split(';', 1)[0];
+    const eq = pair.indexOf('=');
+    if (eq > 0 && /passkey/i.test(pair.slice(0, eq)) && pair.slice(eq + 1)) return pair;
+  }
+  return null;
+}
+
+// On the way out: whenever Better Auth sets the challenge cookie, copy it into a header the
+// native client can read. setResponse writes cookies with res.setHeader before writeHead, so
+// intercepting setHeader lands the extra header in the same flush.
+function relayChallengeOut(res) {
+  const set = res.setHeader.bind(res);
+  res.setHeader = (name, value) => {
+    if (String(name).toLowerCase() === 'set-cookie') {
+      const pair = passkeyCookiePair(value);
+      if (pair) set(PASSKEY_CH_HEADER, pair);
+    }
+    return set(name, value);
+  };
+}
+
+// On the way in: if the client echoed the challenge back in the header and no real cookie is
+// present (the native case), fold it into Cookie so the plugin finds it exactly where it looks.
+function relayChallengeIn(req) {
+  const hdr = req.headers[PASSKEY_CH_HEADER];
+  if (!hdr || /passkey/i.test(req.headers.cookie || '')) return;
+  req.headers.cookie = req.headers.cookie ? req.headers.cookie + '; ' + hdr : String(hdr);
+}
+
 // The web app is same-origin and needs none of this. The native shells are not: inside
 // Capacitor the page is capacitor://localhost, so every call here is cross-origin and the
 // browser will not send it at all without these headers. Reflecting only known origins
@@ -689,12 +735,12 @@ function cors(req, res) {
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, ' + PASSKEY_CH_HEADER);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  // The bearer token comes back in a custom header, which a cross-origin caller cannot read
-  // unless it is exposed by name. Without this the native app signs in and never sees its
-  // own token.
-  res.setHeader('Access-Control-Expose-Headers', 'set-auth-token');
+  // Custom headers a cross-origin caller cannot read unless exposed by name: the bearer token
+  // it gets on sign-in, and the relayed passkey challenge it must echo back to verify. Without
+  // these the native app signs in and never sees its token, or never completes the ceremony.
+  res.setHeader('Access-Control-Expose-Headers', 'set-auth-token, ' + PASSKEY_CH_HEADER);
   return true;
 }
 
@@ -704,6 +750,8 @@ http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
   if (url.pathname.startsWith('/api/auth/')) {
+    relayChallengeIn(req);
+    relayChallengeOut(res);
     auditAuthCall(req, res, url.pathname.slice('/api/auth/'.length));
     try { return await authHandler(req, res); }
     catch (e) {
