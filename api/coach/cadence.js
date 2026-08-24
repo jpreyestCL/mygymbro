@@ -15,10 +15,12 @@ import * as cfgStore from './config.js';
 const TICK_MS = 60000;
 
 /** Weekly cadence fires within the minute; everyWorkouts fires as soon as the count is met. */
-export function isDue(coach, S, now) {
+export function isDue(coach, S, now, serverLastAt = 0) {
   const cadence = coach.cadence;
   if (!cadence || cadence === 'off') return false;
-  const lastAt = coach.lastReview?.at || 0;
+  // Client lastReview advances on apply/dismiss; server lastReviewAt advances when a
+  // review job actually finishes. Cadence must honour both or it re-queues every tick.
+  const lastAt = Math.max(coach.lastReview?.at || 0, serverLastAt || 0);
 
   // Nothing new to read is the most common reason not to run, and it applies to both modes.
   const workouts = S.workouts || [];
@@ -50,9 +52,11 @@ export function startCadence(deps) {
         const S = jobs.readState(user.id);
         const coach = S?.coach;
         if (!coach?.consent?.agreedAt) continue;         // consent revoked ⇒ cadence stops
+        const rec = jobs.readUser(user.id);
+        if (rec.pending || rec.current) continue;        // already holding or running a look
         const tz = coach.cadence?.weekly ? (S.reminder?.tz || 'UTC') : null;
         const now = tz ? deps.userNow(tz) : null;
-        if (!isDue(coach, S, now)) continue;
+        if (!isDue(coach, S, now, rec.lastReviewAt)) continue;
         jobs.enqueue(user.id, { kind: 'review', trigger: 'scheduled' });
         console.log('coach: scheduled review queued for', user.id);
       } catch (e) {

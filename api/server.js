@@ -657,6 +657,14 @@ coachJobs.recoverOnBoot();
 // A ready proposal is the one Coach event worth a notification. Failures and "nothing to
 // change" stay silent on purpose (FR-38/E4).
 coachJobs.setProposalHook((uid, pending) => {
+  if (pending?.bundle) {
+    sendPush(uid, {
+      title: 'Your Coach has a plan',
+      body: pending.summary || 'A new plan is ready to review',
+      tag: 'coach-proposal', url: '#/coach/proposal'
+    });
+    return;
+  }
   const n = (pending?.changes || []).length;
   if (!n) return;
   sendPush(uid, {

@@ -141,6 +141,8 @@ export function enqueue(uid, opts) {
     if (cred.reason === 'shared-account') throw new CoachError('shared', cred.message);
     throw new CoachError('off', 'this profile has no provider account connected');
   }
+  // Resolving the credential must not bind it — only spending does. This is that spend.
+  cfgStore.bindInstanceCredential(uid);
 
   // The privilege drop is what keeps a provider runtime out of ./data. If it cannot be
   // performed, there is no job — see canDropPrivileges for why this is not a warning either.
@@ -200,7 +202,11 @@ function finish(job, result) {
     ...rec,
     current: null,
     pending: result.pending !== undefined ? result.pending : rec.pending,
-    history
+    history,
+    // Server-side last look. Cadence reads client `coach.lastReview` which only advances
+    // when the user applies or dismisses a proposal — a scheduled review that finished
+    // (or failed after spending a slot) would otherwise still look due on the next tick.
+    ...(job.kind === 'review' ? { lastReviewAt: Date.now() } : {})
   });
   cfgStore.logJob({
     at: new Date().toISOString(), uid: job.uid, kind: job.kind, trigger: job.trigger,

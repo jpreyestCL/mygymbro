@@ -248,6 +248,26 @@ test('the admin test-run completes a round trip without a user to spend', async 
   assert.equal(r.version, 'fixture');
 });
 
+test('enqueue binds the instance credential to the first profile that spends it', async () => {
+  const uid = 'u-bind';
+  writeState(DIR, uid, sampleState());
+  cfg.save({
+    enabled: true, provider: 'claude', authMode: 'instance', boundUid: null,
+    auth: { type: 'cli-token', account: 'owner@example.test', data: cfg.encrypt({ token: 'tok-bind' }) },
+    caps: { perProfileDaily: 10, instanceDaily: 0 }
+  });
+  try {
+    assert.equal(cfg.load().boundUid, null);
+    jobs.enqueue(uid, { kind: 'review' });
+    assert.equal(cfg.load().boundUid, uid);
+    writeState(DIR, 'u-bind-other', sampleState());
+    assert.throws(() => jobs.enqueue('u-bind-other', { kind: 'review' }), e => e.code === 'shared');
+    await settle(uid);
+  } finally {
+    cfg.save({ enabled: true, provider: 'fixture', authMode: 'instance', boundUid: null, auth: null });
+  }
+});
+
 test('a job is refused outright when the privilege drop cannot be performed', () => {
   const uid = 'u-priv';
   writeState(DIR, uid, sampleState());
