@@ -1,9 +1,12 @@
 {
-  "appId": "ch.duartesantos.opengym",
-  "appName": "openGym",
+  "appId": "cl.rlz.workset",
+  "appName": "Workset",
   "webDir": "dist",
   "backgroundColor": "#0c0e12",
   "android": {
     "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
   }
 }

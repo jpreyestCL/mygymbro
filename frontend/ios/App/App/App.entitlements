@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- webcredentials is what makes passkeys work at all in this app: iOS will only sign a
+         WebAuthn challenge for mygym.rlz.cl if the domain vouches for this app through its
+         apple-app-site-association file. Without it the ceremony fails before any network
+         call, and no amount of server-side config can fix it.
+
+         The `?mode=developer` variant is the one to use against a simulator or a debug
+         build: it makes iOS fetch the AASA straight from the domain instead of Apple's CDN,
+         which otherwise caches it for up to 24 hours and makes every change invisible.
+         Remove it (or keep only the plain entry) for a release build. -->
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>webcredentials:mygym.rlz.cl</string>
+        <string>applinks:mygym.rlz.cl</string>
+    </array>
+    <key>com.apple.developer.healthkit</key>
+    <true/>
+    <!-- No clinical records, no background delivery: body mass is all this app reads. Each
+         extra capability here is one more thing to justify in App Review and one more line
+         in the privacy label. -->
+    <key>com.apple.developer.healthkit.access</key>
+    <array/>
+</dict>
+</plist>

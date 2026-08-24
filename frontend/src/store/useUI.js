@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { uid } from '../lib/format.js'
 import { beep, vibrate } from '../lib/sound.js'
 import { api } from '../lib/api.js'
+import { restActivityStart, restActivityStop } from '../lib/native.js'
 import { t } from '../lib/i18n.js'
 import { useStore } from './useStore.js'
 
@@ -38,11 +39,15 @@ export const useUI = create((set, get) => ({
     toastTm = setTimeout(() => set({ toastMsg: '' }), 2200)
   },
 
-  startRest(sec) {
+  startRest(sec, info) {
     get().stopRest()
     const endsAt = Date.now() + sec * 1000
     set({ timer: { left: sec, total: sec, endsAt } })
     pushRestTimer(sec)
+    // On iOS the countdown also goes to the Lock Screen and the Dynamic Island, which is the
+    // point: between sets the phone is face down on a bench, and the whole reason to unlock
+    // it was to see this number.
+    restActivityStart(sec, info)
     timerTick = () => {
       const tm = get().timer
       if (!tm) return
@@ -73,6 +78,9 @@ export const useUI = create((set, get) => ({
     if (timerInt) clearInterval(timerInt); timerInt = null
     if (timerTick) document.removeEventListener('visibilitychange', timerTick); timerTick = null
     if (get().timer) cancelPushRestTimer()
+    // Ends immediately rather than fading: the rest is over the moment the next set starts,
+    // and a dead countdown left on the Lock Screen is worse than none.
+    restActivityStop()
     set({ timer: null })
   },
 

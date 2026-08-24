@@ -9,12 +9,18 @@ import { pushSupported, enablePush, disablePush, sendTestPush } from '../lib/pus
 import { wakeLockSupported } from '../lib/wakelock.js'
 import { t, LANGS, INSTR_LANGS } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
+import { healthAvailable } from '../lib/native.js'
 import { MOBILE, shareExport, syncReminder } from '../lib/mobile.js'
-import { loadStarterPlan, confirmSheet, importFromApp, recoveryEmailSheet } from '../sheets.jsx'
+import { loadStarterPlan, confirmSheet, importFromApp, recoveryEmailSheet, healthSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Section, Row, SelectRow, Switch, Segmented, Button, TextField } from '../components/ui.jsx'
 
 export default function Settings() {
+  // Whether this build can talk to Apple Health at all: false on the web, on Android, and on
+  // an iPhone that has it switched off. Gates the whole section rather than showing a row
+  // that would do nothing.
+  const [health, setHealth] = useState(false)
+  useEffect(() => { healthAvailable().then(setHealth) }, [])
   const nav = useNavigate()
   const S = useStore(s => s.S)
   const user = useStore(s => s.user)
@@ -193,6 +199,10 @@ export default function Settings() {
     </Section>
 
     {/* ---------- data: fill it, bring things over, back it up, wipe it ---------- */}
+    {health && <Section title={t('Health')} footer={t('Weigh-ins you log here are written to Health as you save them.')}>
+      <Row icon="heart" iconTint="var(--red)" title={t('Apple Health')} subtitle={t('Import body weight recorded elsewhere')} accessory="chevron" onClick={healthSheet} />
+    </Section>}
+
     <Section title={t('Data')}>
       <Row icon="sparkles" iconTint="var(--acc)" title={t('Load starter plan (PPL)')} accessory="chevron" onClick={loadStarterPlan} />
       <Row icon="shuffle" iconTint="var(--teal)" title={t('Import from another app')}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from './store/useStore.js'
+import { api } from './lib/api.js'
 import { useUI } from './store/useUI.js'
 import { EXDB, EXIDX, BODYPARTS, isCardio, isBodyweightEq, allExercises, equipmentOf, exOr } from './lib/exercises.js'
 import { fmtDate, fmtNum, fmtVol, fmtDur, durPart, todayISO, uid, exCount, DAYN, MONTHS_LONG, ACCENTS } from './lib/format.js'
@@ -18,7 +19,8 @@ import { loadOfWorkouts } from './lib/muscles.js'
 import { parseImport, mergeImport } from './lib/import-csv.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-share.js'
 import { estimate1RM, best1RM, bestSetOf, is1RMRecord, REP_CAP } from './lib/onerm.js'
-import { unitForEx, convert } from './lib/units.js'
+import { unitForEx, convert, baseUnit } from './lib/units.js'
+import { healthWriteWeight, healthReadWeights, healthAuthorize, healthAvailable } from './lib/native.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS } from './lib/progression.js'
 import { MOBILE, shareExport } from './lib/mobile.js'
 
@@ -99,6 +101,11 @@ function BwSheet({ required, onDone, close }) {
       if (ex) { ex.w = n; ex.t = Date.now() } else s.bodyweight.push({ d: iso, w: n, t: Date.now() })
       s.bodyweight.sort((a, b) => (a.d < b.d ? -1 : 1))
     })
+    // Out to Apple Health as well, so the number is not trapped in this one app. Fire and
+    // forget: Health being unavailable, or the permission declined, must not fail a weigh-in
+    // that is already saved locally. Converted to kg because HealthKit stores mass in real
+    // units, not in whichever one the profile happens to display.
+    healthWriteWeight(convert(n, baseUnit(st), 'kg'))
     close()
     if (onDone) onDone(n); else toast(t('Weight saved'))
   }
@@ -391,7 +398,7 @@ function RecoveryEmail({ close }) {
   return <>
     <h3>{t('Recovery email')}</h3>
     <p className="muted">{t('Passkeys stay your way in. This is only the way back if you lose them — a one-time link to this address, then you set up a new passkey.')}</p>
-    <input className="fld" type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
+    <input className="input" type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
       value={email} onChange={e => setEmail(e.target.value)} />
     <div style={{ height: 12 }} />
     <Button variant="primary" disabled={busy || !email.trim()} onClick={save}>
@@ -402,6 +409,66 @@ function RecoveryEmail({ close }) {
   </>
 }
 export const recoveryEmailSheet = () => ui().openSheet(close => <RecoveryEmail close={close} />)
+
+/* ======================= Apple Health ======================= */
+/**
+ * Body weight, both directions. Weigh-ins written here go out on save (see BW sheet); this
+ * pulls what other apps and smart scales have written in.
+ *
+ * Only body mass, and only on request. Every additional HealthKit type is another permission
+ * prompt to justify to a user and another line on the App Store privacy label, and this app
+ * has no use for heart rate.
+ */
+function HealthSync({ close }) {
+  const st = useStore(s => s.S)
+  const update = useStore(s => s.update)
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(null)
+
+  const pull = async () => {
+    setBusy(true)
+    try {
+      if (!(await healthAuthorize())) { toast(t('Health access was not granted')); return }
+      const samples = await healthReadWeights()
+      if (!samples.length) {
+        // Not an error: HealthKit never discloses whether reading was allowed, so "nothing
+        // came back" and "you said no" are indistinguishable by design.
+        setDone({ added: 0, skipped: 0 })
+        return
+      }
+      // One entry per day, the newest sample wins, and a day already logged here is left
+      // alone — the number you typed beats one a scale guessed.
+      const byDay = new Map()
+      for (const s2 of samples) if (!byDay.has(s2.d)) byDay.set(s2.d, s2)
+      const have = new Set(st.bodyweight.map(b => b.d))
+      const fresh = [...byDay.values()].filter(s2 => !have.has(s2.d))
+      update(s => {
+        fresh.forEach(f => s.bodyweight.push({ d: f.d, w: convert(f.kg, 'kg', baseUnit(s)), t: f.t }))
+        s.bodyweight.sort((a, b) => (a.d < b.d ? -1 : 1))
+      })
+      setDone({ added: fresh.length, skipped: byDay.size - fresh.length })
+    } catch (e) { toast(e.message) } finally { setBusy(false) }
+  }
+
+  if (done) return <>
+    <h3>{t('Health')}</h3>
+    <p className="muted">{done.added
+      ? t('{0} weigh-ins imported. {1} days were already logged here and were left as they are.', done.added, done.skipped)
+      : t('Nothing new to import — either Health has no weight entries, or you already have them all.')}</p>
+    <Button variant="primary" onClick={close}>{t('Done')}</Button>
+  </>
+
+  return <>
+    <h3>{t('Apple Health')}</h3>
+    <p className="muted">{t('Your weigh-ins are saved to Health automatically. This brings the other direction in: weights recorded by your scale or another app.')}</p>
+    <Button variant="primary" icon="download" disabled={busy} onClick={pull}>
+      {busy ? t('Reading…') : t('Import body weight from Health')}
+    </Button>
+    <div style={{ height: 8 }} />
+    <div className="small dim">{t('Body weight only. Workouts and heart rate are never read.')}</div>
+  </>
+}
+export const healthSheet = () => ui().openSheet(close => <HealthSync close={close} />)
 
 /* ============================ add to routine ============================ */
 function AddToRoutine({ ex, close }) {

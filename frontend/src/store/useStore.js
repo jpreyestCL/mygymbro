@@ -4,6 +4,7 @@ import { localTZ } from '../lib/format.js'
 import { registerCustom } from '../lib/exercises.js'
 import { DEMO, DEMO_SEEDED } from '../lib/demo.js'
 import { MOBILE, nativeLoad, nativeSave, syncReminder } from '../lib/mobile.js'
+import { API_BASE } from '../lib/api.js'
 
 const KEY = 'gym_state_v1'
 export const DEF = {
@@ -155,9 +156,14 @@ export const useStore = create((set, get) => {
 
     // Boot: ask the server who we are, then pull.
     async boot() {
-      // Mobile build: no backend either — restore from the file mirror (the durable copy;
-      // localStorage may have been evicted since the last run) and go straight in.
-      if (MOBILE) {
+      // Native build WITH a server (the App Store one): it is a real account, so boot like
+      // the web does — ask who we are, then pull. The file mirror below still runs on every
+      // persist, which is what keeps a session's work safe if iOS evicts WebView storage
+      // mid-workout; it is a local cache here rather than the only copy.
+      //
+      // Native build WITHOUT a server (the sideloaded, account-free flavour) keeps the old
+      // path: no sign-in, the phone is the account.
+      if (MOBILE && !API_BASE) {
         const saved = await nativeLoad()
         const S = get().S
         if (saved && (!hasData(S) || (saved._ts || 0) >= (S._ts || 0))) {
@@ -184,6 +190,7 @@ export const useStore = create((set, get) => {
         const me = await api('/api/me')
         get().setUser(me.user)
         await get().pullState()
+        if (MOBILE) syncReminder(get().S)   // native reminders, now driven by synced data
         // Re-stamp the reminder's timezone on every load — keeps it correct if you're travelling,
         // without needing to revisit Settings.
         const tz = localTZ()
