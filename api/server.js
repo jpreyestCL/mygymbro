@@ -6,7 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import webpush from 'web-push';
 
-import { auth, isAdmin as isAdminUser, TRUSTED_ORIGINS, listUsers, findUser, setBanned, countUsers } from './auth.js';
+import { auth, isAdmin as isAdminUser, TRUSTED_ORIGINS, listUsers, findUser, setBanned, countUsers, setRecoveryEmail } from './auth.js';
+import { mailEnabled } from './email.js';
 import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 
 const PORT = +(process.env.PORT || 3000);
@@ -213,7 +214,7 @@ const routes = {
   'GET /api/health': async (req, res) => json(res, 200, { ok: true, users: await countUsers() }),
 
   // Public config the login screen needs before anyone is signed in.
-  'GET /api/config': async (req, res) => json(res, 200, { invite_only: INVITE_ONLY }),
+  'GET /api/config': async (req, res) => json(res, 200, { invite_only: INVITE_ONLY, recovery: mailEnabled() }),
 
   'GET /api/me': async (req, res) => {
     const user = await readSession(req);
@@ -302,6 +303,24 @@ const routes = {
       });
     } else presence.delete(user.id);
     json(res, 200, { ok: true });
+  },
+
+  // Recovery address. Stored unverified and confirmed by mail: an address nobody has proven
+  // they own must never be able to open the account, in either direction.
+  'PUT /api/recovery-email': async (req, res) => {
+    const user = await readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    if (!mailEnabled()) return json(res, 503, { error: 'this instance cannot send email' });
+    const body = await readBody(req);
+    const r = await setRecoveryEmail(user.id, body.email);
+    if (!r.ok) return json(res, 400, { error: r.error });
+    try {
+      await auth.api.sendVerificationEmail({ body: { email: r.email }, headers: fromNodeHeaders(req.headers) });
+    } catch (e) {
+      console.error('verification mail', e.message);
+      return json(res, 502, { error: 'saved, but the confirmation email could not be sent' });
+    }
+    json(res, 200, { ok: true, email: r.email });
   },
 
   /* ---------- admin dashboard ---------- */

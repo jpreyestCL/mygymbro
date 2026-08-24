@@ -358,6 +358,51 @@ function ExerciseHistory({ exId, close }) {
 }
 export const exerciseHistorySheet = exId => ui().openSheet(close => <ExerciseHistory exId={exId} close={close} />)
 
+/* ======================= recovery email ======================= */
+/**
+ * The one thing standing between a lost phone and a lost training history.
+ *
+ * Saved unverified: a confirmation link goes to the address, and only a confirmed one can
+ * ever be used to sign in. That ordering is the whole security of it — an address nobody has
+ * proven they own must not open an account, whether it was typed by mistake or on purpose.
+ */
+function RecoveryEmail({ close }) {
+  const user = useStore(s => s.user)
+  const setUser = useStore(s => s.setUser)
+  const [email, setEmail] = useState(user?.needsRecovery ? '' : user?.email || '')
+  const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  const save = async () => {
+    setBusy(true)
+    try {
+      const r = await api('/api/recovery-email', { method: 'PUT', body: JSON.stringify({ email }) })
+      setUser({ ...user, email: r.email, needsRecovery: false })
+      setSent(true)
+    } catch (e) { toast(e.message) } finally { setBusy(false) }
+  }
+
+  if (sent) return <>
+    <h3>{t('Check your inbox')}</h3>
+    <p className="muted">{t('We sent a confirmation link to {0}. Until you open it, the address cannot be used to sign in.', email)}</p>
+    <Button variant="primary" onClick={close}>{t('Done')}</Button>
+  </>
+
+  return <>
+    <h3>{t('Recovery email')}</h3>
+    <p className="muted">{t('Passkeys stay your way in. This is only the way back if you lose them — a one-time link to this address, then you set up a new passkey.')}</p>
+    <input className="fld" type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
+      value={email} onChange={e => setEmail(e.target.value)} />
+    <div style={{ height: 12 }} />
+    <Button variant="primary" disabled={busy || !email.trim()} onClick={save}>
+      {busy ? t('Sending…') : t('Save and send confirmation')}
+    </Button>
+    <div style={{ height: 8 }} />
+    <div className="small dim">{t('We only ever email you about getting back into your account.')}</div>
+  </>
+}
+export const recoveryEmailSheet = () => ui().openSheet(close => <RecoveryEmail close={close} />)
+
 /* ============================ add to routine ============================ */
 function AddToRoutine({ ex, close }) {
   const st = useStore(s => s.S)

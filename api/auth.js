@@ -16,6 +16,8 @@
 import { betterAuth } from 'better-auth'
 import { passkey } from '@better-auth/passkey'
 import { bearer } from 'better-auth/plugins/bearer'
+import { magicLink } from 'better-auth/plugins/magic-link'
+import { send, recoveryEmail, mailEnabled } from './email.js'
 import { Pool } from 'pg'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -73,6 +75,23 @@ export const auth = betterAuth({
   // Email/password is deliberately off: the whole point of this app's sign-in is that there
   // is no password to phish or reuse. Email exists only as a recovery channel, added later.
   emailAndPassword: { enabled: false },
+  emailVerification: {
+    sendOnSignUp: false,
+    sendVerificationEmail: async ({ user, url }) => {
+      await send({
+        to: user.email,
+        subject: 'Confirm your recovery email',
+        text: `Hi ${user.name || 'there'},\n\nConfirm this address so it can get you back into `
+          + `your account if you ever lose your passkey:\n${url}\n\n`
+          + `If you didn't ask for this, ignore it — the address will not be used.`,
+        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;line-height:1.55;color:#111">`
+          + `<p>Hi ${user.name || 'there'},</p>`
+          + `<p>Confirm this address so it can get you back into your account if you ever lose your passkey:</p>`
+          + `<p><a href="${url}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600">Confirm email</a></p>`
+          + `<p style="color:#666;font-size:14px">If you didn't ask for this, ignore it — the address will not be used.</p></div>`,
+      })
+    },
+  },
   user: {
     additionalFields: {
       // Mirrors the old db.json `admin` flag. ADMIN_UIDS still works as an env-level
@@ -120,6 +139,36 @@ export const auth = betterAuth({
         },
       },
     }),
+    // Recovery. A passkey that never reached iCloud is otherwise a dead account, and for a
+    // public app that is a support burden measured in lost training histories. A signed link
+    // to a verified address gets you back in, where you register a fresh passkey.
+    //
+    // NOT a second way to log in day to day: passkeys stay the front door. This is the
+    // fire escape, which is why it is short-lived and single-use.
+    magicLink({
+      expiresIn: 600,                 // 10 minutes
+      // Nobody signs up by email — an account only ever begins with a passkey ceremony, so a
+      // link to an unknown address must not quietly mint an account.
+      disableSignUp: true,
+      sendMagicLink: async ({ email, url, token }, request) => {
+        // Migrated accounts carry a reserved @passkey.invalid address. Sending there would
+        // bounce; worse, it would tell the caller a mail is on its way when it never can be.
+        if (email.endsWith('@passkey.invalid')) {
+          console.warn('[auth] recovery requested for an account with no real email')
+          return
+        }
+        // Only a PROVEN address opens the fire escape. Without this check, setting your
+        // recovery address to someone else's mailbox would hand them your account — and
+        // pointing it at a stranger's would hand yours to them.
+        const row = (await pool.query('select name, "emailVerified" from "user" where email = $1', [email])).rows[0]
+        if (!row?.emailVerified) {
+          console.warn('[auth] recovery requested for an unverified address — not sending')
+          return
+        }
+        const name = row.name
+        await send({ to: email, ...recoveryEmail(url, name) })
+      },
+    }),
     // Native apps get a token in a `set-auth-token` response header and send it back as
     // `Authorization: Bearer …`, because cookies do not survive the origin change.
     bearer(),
@@ -146,3 +195,16 @@ export const setBanned = async (id, banned) => {
 }
 
 export const countUsers = async () => Number((await pool.query('select count(*)::int as n from "user"')).rows[0].n)
+
+/** Set (or replace) the recovery address. Unverified until the owner clicks the link. */
+export async function setRecoveryEmail(userId, email) {
+  const clean = String(email || '').trim().toLowerCase()
+  // Deliberately loose: the confirmation mail is the real validator. A regex that rejects a
+  // deliverable address is worse than one that lets an undeliverable one through.
+  if (!/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(clean)) return { ok: false, error: 'that does not look like an email address' }
+  if (clean.endsWith('@passkey.invalid')) return { ok: false, error: 'reserved domain' }
+  const taken = await pool.query('select id from "user" where lower(email) = $1 and id <> $2', [clean, userId])
+  if (taken.rowCount) return { ok: false, error: 'that address is already on another account' }
+  await pool.query('update "user" set email = $2, "emailVerified" = false, "updatedAt" = now() where id = $1', [userId, clean])
+  return { ok: true, email: clean }
+}
