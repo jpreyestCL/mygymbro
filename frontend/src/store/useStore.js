@@ -3,6 +3,7 @@ import { api, clearAuthToken } from '../lib/api.js'
 import { localTZ } from '../lib/format.js'
 import { registerCustom } from '../lib/exercises.js'
 import { DEMO, DEMO_SEEDED } from '../lib/demo.js'
+import { guestAllowed } from '../lib/guest.js'
 import { MOBILE, nativeLoad, nativeSave, syncReminder } from '../lib/mobile.js'
 import { API_BASE } from '../lib/api.js'
 
@@ -102,6 +103,16 @@ export const useStore = create((set, get) => {
     isGuest: () => localStorage.getItem('gym_guest') === '1',
     setGuest(v) { if (v) localStorage.setItem('gym_guest', '1'); else localStorage.removeItem('gym_guest'); set({}) },
 
+    // Public config from /api/config (invite_only, recovery, allow_guest). null until the first
+    // successful fetch — boot and the login screen both read it, so it is fetched once and
+    // cached here rather than by each screen that happens to need it.
+    config: null,
+    async loadConfig() {
+      if (get().config) return get().config
+      try { const c = await api('/api/config'); set({ config: c }); return c }
+      catch { return null }
+    },
+
     setUser(u) {
       if (u) { localStorage.setItem('gym_user', JSON.stringify(u)); localStorage.removeItem('gym_guest') }
       else localStorage.removeItem('gym_user')
@@ -186,6 +197,12 @@ export const useStore = create((set, get) => {
         set({ ready: true })
         return
       }
+      // Guests never authenticate, so an instance that turned guest mode off has no request to
+      // refuse — the only way the switch reaches someone already inside is here, on their next
+      // boot. Ending the session needs a positive `allow_guest: false`; see lib/guest.js for why
+      // an unreachable server must not be allowed to lock anyone out.
+      const cfg = await get().loadConfig()
+      if (!guestAllowed(cfg)) get().setGuest(false)
       try {
         const me = await api('/api/me')
         get().setUser(me.user)

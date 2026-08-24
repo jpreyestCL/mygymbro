@@ -95,14 +95,48 @@ If you'd rather control who gets in, two optional settings in `.env` turn that a
 ```bash
 ADMIN_UIDS=youruserid      # comma-separated; these users get the admin dashboard
 INVITE_ONLY=1              # new profiles need an invite code
+ALLOW_GUEST=0              # hide "Continue without account" on the login screen
 ```
 
-Register your own passkey profile first, then find your id in `./data/db.json` under `users[].id`
-and put it in `ADMIN_UIDS`. You'll get an **Admin dashboard** link in Settings: who's training
+Register your own passkey profile first, then find your id — identity lives in Postgres in this
+fork, so `select id, name from "user";` — and put it in `ADMIN_UIDS`.
+
+`ALLOW_GUEST=0` removes the local-only guest entrance, for an instance where every profile should
+be a real account. It is allowed by default, and the switch is deliberately asymmetric: a client
+that cannot reach `/api/config` keeps showing the entrance, because "the server did not answer"
+must not read the same as "guests are disabled" and lock people out of their own instance. Someone
+already in guest mode is signed out on their next boot, since a guest never authenticates and so
+has no request to refuse. You'll get an **Admin dashboard** link in Settings: who's training
 right now, each user's workout history and body weight, the ability to disable an account (signed
 out and locked out everywhere until you re-enable it), and — with `INVITE_ONLY=1` — generating and
 revoking invite codes. Existing accounts keep working when you switch invite-only on. Admin access
 is gated by your passkey and enforced server-side, so it needs no separate login.
+
+### The activity log
+
+The admin dashboard carries an **Activity log**: sign-ins, sign-outs, the attempts that failed,
+passkey and recovery-address changes, and every admin action. It is on by default — it records
+strictly less than the instance already holds, and a security feature that ships switched off
+protects nobody.
+
+It is one JSON object per line in `$DATA_DIR/audit.log`, appended and never rewritten, so `jq`
+reads it directly. Four settings:
+
+```bash
+AUDIT_LOG=0                # switch the log off entirely (the card disappears too)
+AUDIT_MAX=5000             # keep at most this many events; 0 = no count cap
+AUDIT_DAYS=90              # discard events older than this; 0 = no age cap
+AUDIT_IP=net               # off (default) | net (/24, /48) | full
+```
+
+`AUDIT_IP` is off by default because an address is the one field here that says where somebody
+physically is. `net` keeps enough to tell one source from another without pointing at a person.
+Behind Cloudflare — as `mygym.rlz.cl` is — the client comes from `CF-Connecting-IP`, which is
+read first: a Cloudflare tunnel does not forward the client in `X-Forwarded-For`, and that header
+then carries only the tunnel's own container, which looks like a valid answer and is not.
+
+Clearing the log is itself logged, and the event counter is not reset, so a clear always leaves a
+visible gap in the ids rather than a clean slate.
 
 Prefer to keep the whole thing off the open internet? A VPN or an auth proxy (Authelia, Cloudflare
 Access…) in front still works, and composes with the above.

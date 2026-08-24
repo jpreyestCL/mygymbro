@@ -85,6 +85,11 @@ screen), defaulting to the profile's.
 
 Consequences worth knowing before touching this:
 
+- `recovery.js` resolves a set's unit as `set.u ?? entry.target ?? entry ?? workout ?? opts.unit`,
+  which is exactly this fork's rule — but only when the caller passes `opts.unit`. Forget it and a
+  pound profile reads ~2.2x too fatigued, silently, because fatigue is a saturating curve that
+  never looks obviously broken. `Stats.jsx` passes `{ unit: baseUnit(S), bodyweightKg }`;
+  `recovery-units.test.js` pins it.
 - `nextPrescription` computes **in the exercise's unit** — `plan.weight` goes straight into
   the set rows, so a jump named "2.5 kg" beside a column headed lb is a wrong number, not a
   wording bug. Steps are per-unit too (2.5 kg vs 5 lb), not a converted 2.5.
@@ -112,6 +117,16 @@ as pure functions of `S`, with tests beside them:
 - `history.js` — the reading layer over `S`: `modeOf` (reps/time/cardio), `isBw`, `isPerSide`,
   `buildSets` (pre-fills from last time), `effectiveRoutine*`, volume/streak helpers.
 - `onerm.js`, `effort.js`, `muscles.js`, `import-csv.js` (FitNotes/Strong/Hevy), `plan-share.js`.
+- `workout-model.js` — what a set row *is*: its phase (work vs warm-up) and its mode, resolved
+  from explicit fields with legacy fallbacks. `isWarmupRow` is the one every other module asks.
+- `recovery.js` — per-muscle fatigue (36h half-life, saturating, scored against a causal
+  per-muscle reference) and retained strength (14-day plateau, 28-day half-life, 0.5 floor).
+  Takes `opts.unit`; **pass it** — see the units note below. `recovery-view.js` owns the
+  ready/recovering/fatigued boundaries so views and tests cannot drift apart.
+- `strength-exercises.js` — the same decay per exercise rather than per muscle, for the
+  Strength view's list. `supersetFlow.js` — where a completed set sends you next in a superset.
+- `audit.js` — turns the server's reason codes into English for the admin activity log.
+- `guest.js`, `back.js` (Android system back), `finish-workout.js`.
 
 Per CONTRIBUTING.md: anything in this category **gets a unit test** — these rules are nearly
 impossible to verify by clicking, and the progression engine grew two real bugs that only tests
@@ -129,6 +144,44 @@ so shared controls can open sheets without importing the store at module scope.
 `useUI` also owns the rest timer and the work timer (timed sets), and mirrors the rest timer to
 the server (`/api/push/rest-timer`) so a suspended tab still gets the alert via Web Push.
 
+Two things in the active workout are subtler than they look:
+
+- **Rest and navigation are decided after the write, against fresh state**, because pairing a
+  superset mid-session changes which unit an index belongs to. They fire only on progress past
+  that exercise's high-water mark (`setProgressHighWater`), so unchecking and re-checking finished
+  work does not replay the rest timer or jump the screen. A superset rests when the round is
+  through both exercises, not between them.
+- Every opened sheet pushes a history entry (`Modals.jsx`), which is what makes browser back and
+  the Android system back gesture close a sheet instead of leaving the app. `lib/back.js` decides:
+  sheet, then page, then press-again-to-exit — a locked sheet swallows back on purpose.
+
+### The MCP server (`mcp/`)
+
+A read-only Model Context Protocol bridge — eight tools that let an LLM client read this
+profile's routines, workouts, weigh-ins, 1RMs and muscle balance. Two sources, picked by env:
+
+| Mode | Env | Reads |
+|---|---|---|
+| local | `OPENGYM_DATA` (+ `OPENGYM_UID` if several profiles) | `state-<uid>.json` off the disk |
+| remote | `OPENGYM_URL` + `OPENGYM_TOKEN` | `GET /api/data` with a Better Auth bearer token |
+
+Remote mode adds **no new server route**: `/api/data` is what the web client already syncs
+against, and the `bearer()` plugin already accepts `Authorization: Bearer …` there. Identity
+moved to Postgres but training data did not, so local mode works unchanged — only the uid lookup
+differs (there are no `users` in `db.json` any more; it resolves from the state files).
+
+Two things to keep in mind before touching it:
+
+- **It imports `frontend/src/lib/*` under plain Node.** Anything Vite-only in that import graph
+  (`import.meta.glob`, `.jsx`, React) kills the server at startup while every vitest test stays
+  green, because vitest resolves through Vite. `npm run check:node-loadable` in `mcp/` is the
+  guard, and it runs under bare `node` on purpose — do not port it to a test file. This is why
+  `i18n-core.js` exists and why `format.js`/`history.js`/`plan-share.js`/`mobile.js` import `t`
+  from it rather than from `i18n.js`.
+- **Every weight it returns is normalised to the profile's unit** (`wBase`/`setLabelIn`) and each
+  payload names that unit. An LLM cannot see a missing `u` and will average 100 kg with 225 lb
+  into "162.5". `mcp/test/units.test.js` pins it.
+
 ### i18n
 
 `lib/i18n.js` is a hand-rolled `t()` where **English source strings are the keys**. Locale packs
@@ -144,6 +197,14 @@ A hand-written `routes` table keyed `'METHOD /path'`. Two runtime dependencies
 (`@simplewebauthn/server`, `web-push`) — keep it near that. Persistence is atomic writes of
 plain JSON under `DATA_DIR`: `db.json` (users, public credentials, invites), `state-<uid>.json`
 (one per profile), `secret` (HMAC key for session cookies), `vapid.json` (generated on first run).
+
+The **activity log** is `audit.log` under `DATA_DIR`, one JSON object per line, appended and never
+rewritten — a flat file rather than a Postgres table because an append is one syscall on a path
+that must never block or fail a sign-in. Better Auth owns login/register here, so the events come
+from wrapping the `/api/auth/*` handler (`auditAuthCall`) and reading the outcome off the response
+status and body, not from hand-written handlers as upstream does. Uniform `.ok`/`.fail` suffixes;
+`AUDIT_IP` defaults to off. `frontend/src/lib/audit.test.js` scrapes the event names out of
+`api/server.js`, so adding an event without a label fails the suite.
 
 Sessions are an HMAC-signed cookie `<uid>:<expiry>:<sv>`; bumping the user's `sv` is how
 "sign out everywhere" works. Admin (`ADMIN_UIDS`) and invite-only signup (`INVITE_ONLY`) are both
@@ -178,7 +239,8 @@ the day-override semantics, change both.
   rotate rather than reuse, and don't add more to `data/`.
 - `.env` / `.env.example` are absent despite the README referring to them; env vars documented in
   README.md and `docs/SELF_HOSTING.md` still apply (`RP_ID`, `ORIGIN`, `WEB_PORT`, `RP_NAME`,
-  `ADMIN_UIDS`, `INVITE_ONLY`, `SESSION_DAYS`).
+  `ADMIN_UIDS`, `INVITE_ONLY`, `SESSION_DAYS`, plus `ALLOW_GUEST` and `AUDIT_LOG`/`AUDIT_MAX`/
+  `AUDIT_DAYS`/`AUDIT_IP` — see `docs/SELF_HOSTING.md`).
 - `website/` is the marketing site (hand-written HTML/CSS/JS, no build step).
 
 ## Deployment — mygym.rlz.cl

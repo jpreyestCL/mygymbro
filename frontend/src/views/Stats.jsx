@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { EXIDX } from '../lib/exercises.js'
@@ -10,7 +10,12 @@ import LineChart from '../components/LineChart.jsx'
 import Heatmap from '../components/Heatmap.jsx'
 import Icon from '../components/Icon.jsx'
 import BodyMap, { BodyMapLegend } from '../components/BodyMap.jsx'
-import { loadOfWorkouts, rankOf, MUSCLE_NAME } from '../lib/muscles.js'
+import { loadOfWorkouts, rankOf, MUSCLE_NAME, musclesOf } from '../lib/muscles.js'
+import { fatigueOf, strengthOf, STRENGTH_FLOOR } from '../lib/recovery.js'
+import { strengthExerciseRowsForMuscle } from '../lib/strength-exercises.js'
+import { fatigueStateOf } from '../lib/recovery-view.js'
+import { isWarmupRow } from '../lib/workout-model.js'
+import { convert, baseUnit } from '../lib/units.js'
 import { e1rmSeries, best1RM } from '../lib/onerm.js'
 import {
   hasEffort, displayScale, scaleName, toScale, avgRir, effortSummary, effortWeeks,
@@ -18,13 +23,121 @@ import {
 } from '../lib/effort.js'
 import { Button, Segmented, SelectRow } from '../components/ui.jsx'
 
+// The last time each muscle took a completed working set. Warm-up rows are excluded on
+// purpose: warming a muscle up is not training it, and counting it would reset the
+// "weeks since training" hint that the strength view is entirely about.
+function latestMuscleTraining(workouts) {
+  const latest = {}
+  for (const workout of workouts || []) {
+    const timestamp = Number(workout?.start || new Date(workout?.d).getTime())
+    if (!Number.isFinite(timestamp)) continue
+    for (const entry of workout.entries || []) {
+      if (!(entry.sets || []).some(set => set?.done === true && !isWarmupRow(set))) continue
+      const exercise = EXIDX[entry.id] || entry.exercise || entry
+      for (const slug of Object.keys(musclesOf(exercise))) {
+        if (latest[slug] == null || timestamp > latest[slug]) latest[slug] = timestamp
+      }
+    }
+  }
+  return latest
+}
+
+// Absolute bands, unlike the balance map's relative shading. Balance asks "is my training
+// even", which only means anything as a comparison inside one window; fatigue and strength
+// ask "what shape is this muscle in right now", which must not change because some other
+// muscle happened to be trained harder.
+export const FATIGUE_LEVELS = [
+  { at: 0, level: 0 },
+  { at: 0.15, level: 1 },
+  { at: 0.25, level: 2 },
+  { at: 0.4, level: 3 },
+  { at: 0.55, level: 4, exclusive: true },
+]
+
+export const STRENGTH_LEVELS = [
+  { at: STRENGTH_FLOOR, level: 0 },
+  { at: 0.625, level: 1 },
+  { at: 0.75, level: 2 },
+  { at: 0.875, level: 3 },
+  { at: 1, level: 4 },
+]
+
+// Fatigue decays continuously, so a mounted Stats screen would otherwise keep showing the
+// reading from the moment it rendered. A minute is far finer than a 36-hour half-life needs,
+// and cheap enough not to matter.
+function useNow() {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const iv = setInterval(() => setTick(tick => tick + 1), 60000)
+    return () => clearInterval(iv)
+  }, [])
+  return Date.now()
+}
+
+/**
+ * Return the whole weeks since a completed muscle-training timestamp.
+ *
+ * @param {number} now Current render-time timestamp in milliseconds.
+ * @param {number} lastTrained Timestamp of the latest completed training event.
+ * @returns {number} Non-negative whole weeks, including zero for ages under seven days.
+ */
+export function weeksSinceTraining(now, lastTrained) {
+  return Math.max(0, Math.floor((now - lastTrained) / 86400000 / 7))
+}
+
+function FatigueLegend() {
+  return <div className="hm-legend hm-fatigue" aria-label={t('Fatigue')}>
+    <span>{t('Fatigued')}</span><div className="hm-c l4" />
+    <span>{t('Recovering')}</span><div className="hm-c l2" />
+    <span>{t('Ready')}</span><div className="hm-c l0" />
+  </div>
+}
+
+function StrengthLegend() {
+  return <div className="hm-legend hm-strength" aria-label={t('Strength')}>
+    <span>1 <span className="dim">{t('full')}</span></span><div className="hm-c l4" /><div className="hm-c l3" /><div className="hm-c l2" />
+    <div className="hm-c l1" /><div className="hm-c l0" /><span>{fmtNum(STRENGTH_FLOOR)} <span className="dim">{t('floor')}</span></span>
+  </div>
+}
+
+function fatigueLabel(value) {
+  const state = fatigueStateOf(value)
+  return t(state === 'ready' ? 'Ready' : state === 'recovering' ? 'Recovering' : 'Fatigued')
+}
+
 // Which muscles the training in a window actually hit — and, the point of the card,
 // which ones it keeps missing. Shading is relative within the window (lib/muscles.js).
+// Two further readings of the same body: fatigue (how recently, weighted by how hard) and
+// retained strength (how long since, decaying toward a floor).
 function MuscleBalance({ S }) {
+  const [view, setView] = useState('balance')
   const [win, setWin] = useState(7)
   const [hard, setHard] = useState(false)
   const [sel, setSel] = useState(null)
-  const now = Date.now()
+  const now = useNow()
+  const workouts = S.workouts
+  // Bodyweight exercises are scored against real body mass, so the fatigue model needs one
+  // number in kilos. Body-weight log entries are always stored in the profile's own unit
+  // (sheets.jsx converts on import), so the profile unit is the unit to convert from.
+  const bodyweightKg = useMemo(() => {
+    const entries = S.bodyweight || []
+    if (!entries.length) return null
+    const last = entries.slice().sort((a, b) => String(a.d).localeCompare(String(b.d))).at(-1)
+    if (!last || !(last.w > 0)) return null
+    return convert(last.w, baseUnit(S), 'kg')
+  }, [S.bodyweight, S.unit])
+  // `unit` is what makes an unstamped set read as the profile's unit rather than as kilos —
+  // without it a pound profile reads ~2.2x too fatigued (see recovery-units.test.js).
+  const opts = useMemo(() => ({ bodyweightKg, unit: baseUnit(S) }), [bodyweightKg, S.unit])
+  const fatigue = useMemo(() => fatigueOf(workouts, now, opts), [workouts, now, opts])
+  const strength = useMemo(() => strengthOf(workouts, now, opts), [workouts, now, opts])
+  const muscleExercises = useMemo(() => (sel ? strengthExerciseRowsForMuscle(S, now, sel) : []), [S, now, sel])
+  const lastTrained = useMemo(() => latestMuscleTraining(workouts), [workouts])
+  const strengthHint = slug => {
+    if (lastTrained[slug] == null) return t('not trained')
+    return t('Weeks since training: {0}', weeksSinceTraining(now, lastTrained[slug]))
+  }
+  const toggleSel = m => setSel(s => (s === m ? null : m))
   const inWin = S.workouts.filter(w =>
     win === 0 ? true
       : win === 7 ? weekKey(w.d) === weekKey(todayISO())
@@ -36,12 +149,24 @@ function MuscleBalance({ S }) {
   const rated = inWin.some(w => w.entries.some(e => e.sets.some(s => s.done && isHardSet(s))))
   const on = hard && rated
   const load = loadOfWorkouts(inWin, on ? isHardSet : null)
+  // The 90-day set counts ride along in the strength view: "this muscle has decayed" is only
+  // actionable next to how much work it has actually been getting.
+  const volWin = S.workouts.filter(w => (w.start || new Date(w.d).getTime()) > now - 90 * 86400000)
+  const vol90 = loadOfWorkouts(volWin, null)
   const { worked, missed } = rankOf(load)
+  const { worked: strengthOrder } = rankOf(strength)
+  const detrained = strengthOrder.filter(slug => strength[slug] < 1)
   const top = worked.slice(0, 4)
   const max = worked.length ? load[worked[0]] : 0
   const sets = m => Math.round((load[m] || 0) * 10) / 10
 
   return <div className="card">
+    {/* The selection deliberately survives a view change: picking a muscle and then flipping
+        between balance, fatigue and strength is reading one muscle three ways, which is the
+        whole reason the three share a card. */}
+    <Segmented className="seg-range" value={view} onChange={setView}
+      options={[{ value: 'balance', label: t('Muscle balance') }, { value: 'fatigue', label: t('Fatigue') }, { value: 'strength', label: t('Strength') }]} />
+    {view === 'balance' ? <>
     <div className="row between" style={{ marginBottom: 8 }}>
       <h2 style={{ margin: 0 }}>{t('Muscle balance')} <span className="dim" style={{ textTransform: 'none', letterSpacing: 0 }}>· {on ? t('by hard sets') : t('by sets worked')}</span></h2>
       {rated && <Button size="sm" icon="flame" style={on ? { color: 'var(--yellow)' } : undefined}
@@ -71,6 +196,50 @@ function MuscleBalance({ S }) {
           ? t('Every muscle group got at least one hard set in this period.')
           : t('Every muscle group got some work in this period.')}</div>}
     </> : <div className="muted small">{t('No workouts in this period yet.')}</div>}
+    </> : view === 'fatigue' ? <>
+      <h2>{t('Fatigue')}</h2>
+      <BodyMap className="tappable hm-fatigue" load={fatigue} thresholds={FATIGUE_LEVELS} body={S.body} selected={sel} onMuscle={toggleSel} />
+      <FatigueLegend />
+      <div className="muted small" style={{ marginTop: 10 }}>{t('Fatigue shows how recently each muscle was trained. High means rest.')}</div>
+      {sel && <div className="mrow" style={{ borderTop: 'var(--hair) solid var(--sep)', marginTop: 4, paddingTop: 10 }}>
+        <span className="nm"><b>{t(MUSCLE_NAME[sel])}</b></span>
+        <span className="v">{fatigueLabel(fatigue[sel])}</span>
+      </div>}
+      {!sel && <div className="muted small" style={{ marginTop: 4 }}>{t('Tap a muscle to see its exercises.')}</div>}
+    </> : <>
+      <h2>{t('Strength')}</h2>
+      <BodyMap className="tappable hm-strength" load={strength} thresholds={STRENGTH_LEVELS} body={S.body} selected={sel} onMuscle={toggleSel} />
+      <StrengthLegend />
+      <div className="muted small" style={{ marginTop: 10 }}>{t('Strength shows retained muscle strength. Train again to reset it.')}</div>
+      {sel && <>
+        <div className="mrow" style={{ borderTop: 'var(--hair) solid var(--sep)', marginTop: 4, paddingTop: 10 }}>
+          <span className="nm"><b>{t(MUSCLE_NAME[sel])}</b></span>
+          <span className="v">{strengthHint(sel)}</span>
+        </div>
+        <h4 className="sec" style={{ marginTop: 14 }}>{t('Exercises')} · {t(MUSCLE_NAME[sel])}</h4>
+        {muscleExercises.length ? muscleExercises.map(row => (
+          <div key={row.id} className="mrow" style={{ minHeight: 48, alignItems: 'stretch' }}>
+            <span className="nm" style={{ whiteSpace: 'normal', lineHeight: 1.35, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {row.name}
+                <span className="dim" style={{ fontSize: 11, marginLeft: 6 }}>{row.primary === sel ? t('primary') : t('secondary')}</span>
+              </span>
+              <span className="small dim" style={{ display: 'block', fontWeight: 400 }}>{t('Est. 1RM')}: {fmtNum(row.est)} {S.unit} · {fmtDate(row.estDate, true)}</span>
+            </span>
+            <span className="bar" style={{ alignSelf: 'center' }}><i style={{ width: '100%', background: 'linear-gradient(to right, var(--acc) ' + Math.round(row.decay * 100) + '%, var(--surface-2) ' + Math.round(row.decay * 100) + '%)' }} /></span>
+            <span className="v" style={{ alignSelf: 'center' }}>{fmtNum(row.current)} {S.unit}<span className="dim"> · {Math.round(row.decay * 100)}%</span></span>
+          </div>
+        )) : <div className="muted small">{t('No exercises with an estimated 1RM yet.')}</div>}
+      </>}
+      {!sel && <>
+        <div className="muted small" style={{ marginTop: 10 }}>{t('Tap a muscle to see its exercises.')}</div>
+        {detrained.map(slug => <div key={slug} className="mrow">
+          <span className="nm">{t(MUSCLE_NAME[slug])}</span>
+          <span className="bar"><i style={{ width: Math.round(strength[slug] * 100) + '%' }} /></span>
+          <span className="v">{t('{0} sets', Math.round((vol90[slug] || 0) * 10) / 10)}</span>
+        </div>)}
+      </>}
+    </>}
   </div>
 }
 

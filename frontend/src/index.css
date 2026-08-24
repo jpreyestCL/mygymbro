@@ -269,6 +269,11 @@ h4.sec{
 .btn.sm{padding:8px 14px;width:auto;font-size:15px;border-radius:var(--r-sm);gap:5px}
 .btn.sm .icn{font-size:16px}
 .btn.xs{padding:5px 10px;width:auto;font-size:13px;border-radius:7px;gap:4px}
+/* Warm-up rows sit above the work rows under their own rule, so the two phases read as two
+   blocks rather than one long list where set 3 might be a warm-up. */
+.setph{margin:8px 0 2px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:10px}
+.setph::after{content:'';flex:1;height:1px;background:var(--sep)}
+.setsep{height:1px;background:var(--sep);margin:9px 0}
 .btn:disabled{opacity:.32;pointer-events:none}
 
 /* ----------------------------------------------------------- tab bar ----- */
@@ -824,6 +829,20 @@ button.tag:active{background:var(--surface-3,var(--surface-2));opacity:.75}
 .bm-m.l2{fill:color-mix(in srgb,var(--acc) 56%,var(--bm-base))}
 .bm-m.l3{fill:color-mix(in srgb,var(--acc) 78%,var(--bm-base))}
 .bm-m.l4{fill:var(--acc)}
+/* Fatigue view: an attention ramp, not the accent ramp. Balance asks "is this even", and the
+   accent answers it neutrally; fatigue asks "should I train this today", where the top band is
+   a warning and needs to read as one. */
+.hm-fatigue .bm-m.l4{fill:var(--red)}
+.hm-fatigue .bm-m.l3{fill:var(--orange)}
+.hm-fatigue .bm-m.l2{fill:var(--yellow)}
+.hm-fatigue .bm-m.l1{fill:color-mix(in srgb,var(--yellow) 32%,var(--bm-base))}
+.hm-fatigue .hm-c.l4{background:var(--red)}
+.hm-fatigue .hm-c.l3{background:var(--orange)}
+.hm-fatigue .hm-c.l2{background:var(--yellow)}
+/* Strength view: only the full-retention band pops, so the eye lands on what is still there
+   rather than on what has decayed. */
+.hm-strength .bm-m.l4{fill:var(--yellow);filter:drop-shadow(0 0 1.5px var(--yellow))}
+.hm-strength .hm-c.l4{background:var(--yellow)}
 .bm-m.sel{stroke:var(--label);stroke-width:7}
 .bodymap.tappable .bm-m{cursor:pointer}
 /* A hairline in the surface colour separates neighbouring muscles; the artwork has no

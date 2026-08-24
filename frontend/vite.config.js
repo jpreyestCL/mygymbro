@@ -14,5 +14,8 @@ export default defineConfig({
       '/gif': { target: media, changeOrigin: true }
     }
   },
-  build: { chunkSizeWarningLimit: 1500 }
+  build: { chunkSizeWarningLimit: 1500 },
+  // See test/setup.js: Node 26's built-in localStorage is unusable without a CLI flag and
+  // shadows the one happy-dom installs, which kills any test that imports the store.
+  test: { setupFiles: ['./test/setup.js'] }
 })

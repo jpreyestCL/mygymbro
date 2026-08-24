@@ -18,6 +18,10 @@ const RP_NAME = process.env.RP_NAME || 'openGym';
 // Admin dashboard (issue): admins are matched by uid; INVITE_ONLY gates new signups behind a
 // code the admin generates. Both default off so a fresh self-hosted instance stays open.
 const INVITE_ONLY = /^(1|true|yes|on)$/i.test(process.env.INVITE_ONLY || '');
+// Whether the login screen may offer "Continue without account". Default ON, and the test is
+// inverted from INVITE_ONLY's on purpose: an unset variable must mean "allowed", so an existing
+// install does not silently lock its guests out on the next deploy.
+const ALLOW_GUEST = !/^(0|false|no|off)$/i.test(process.env.ALLOW_GUEST || '');
 const MAX_BODY = 5 * 1024 * 1024;
 // Secure cookies require HTTPS; over plain http://localhost the flag would drop the cookie
 const SECURE = /^https:/i.test(ORIGIN) ? ' Secure;' : '';
@@ -160,7 +164,9 @@ const isAdmin = isAdminUser;
 async function requireAdmin(req, res) {
   const user = await readSession(req);
   if (!user) { json(res, 401, { error: 'not signed in' }); return null; }
-  if (!isAdmin(user)) { json(res, 403, { error: 'forbidden' }); return null; }
+  // A signed-in non-admin reaching an admin route is worth a line; an anonymous 401 is not,
+  // since every logged-out page load would produce one.
+  if (!isAdmin(user)) { audit(req, 'admin.denied', { ok: false, user }); json(res, 403, { error: 'forbidden' }); return null; }
   return user;
 }
 
@@ -209,12 +215,164 @@ function livePresence(uid) {
 }
 setInterval(() => { for (const [k, v] of presence) if (Date.now() - v.updatedAt > PRESENCE_TTL) presence.delete(k); }, 30000).unref();
 
+/* ---------- audit log ---------- */
+// Who signed in, who tried and failed, and what an admin changed. One JSON object per line in
+// $DATA_DIR/audit.log, appended and never rewritten in place. It deliberately does not live in
+// db.json: that file is rewritten whole on every save, and the sign-in handshake is
+// unauthenticated by design, so an audit trail in there would turn one bogus request into a full
+// db.json rewrite. A line torn by a crash costs one event and is dropped on read.
+//
+// It is a flat file rather than a Postgres table even though this fork has a database, for the
+// same reason: an append is one syscall on a path that must never block or fail a sign-in, and a
+// log nobody can read without psql is a log nobody reads. `jq` works on it directly.
+//
+// On by default. It records strictly less than the instance already holds — every account is in
+// Postgres and every workout is in state-<uid>.json, both readable by any admin — and a security
+// feature that ships switched off protects nobody. IP addresses are the exception: off unless you
+// ask for them, because they are the one field here that says where somebody physically is.
+const AUDIT_ON = !/^(0|false|no|off)$/i.test(process.env.AUDIT_LOG || '');
+const AUDIT_MAX = Math.max(0, +(process.env.AUDIT_MAX || 5000) || 0);     // 0 = no count cap
+const AUDIT_DAYS = Math.max(0, +(process.env.AUDIT_DAYS || 90) || 0);     // 0 = no age cap
+const AUDIT_IP = /^full$/i.test(process.env.AUDIT_IP || '') ? 'full'
+  : /^(1|true|yes|on|net)$/i.test(process.env.AUDIT_IP || '') ? 'net' : 'off';
+const auditFile = path.join(DATA, 'audit.log');
+let auditSeq = 0;      // never reset, not even by a clear — a wiped log leaves a visible id gap
+let auditCount = 0;
+
+// Which header holds the caller depends on what is in front of the API. CF-Connecting-IP comes
+// first because a Cloudflare tunnel does NOT forward the client in X-Forwarded-For — that header
+// then only carries the tunnel's own container, which looks like a valid answer and isn't. This
+// instance sits behind Cloudflare (see CLAUDE.md), so that ordering is the one that matters here.
+// After that, the first entry of X-Forwarded-For is the client and everything behind it is our
+// own hops. All three are only as trustworthy as the proxy in front: it has to overwrite them
+// rather than pass a client-supplied one through. In 'net' mode only the network survives —
+// enough to tell one source from another, not enough to point at a person.
+function clientIp(req) {
+  if (AUDIT_IP === 'off') return null;
+  const raw = String(req.headers['cf-connecting-ip'] || '').trim()
+    || String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+    || String(req.headers['x-real-ip'] || '').trim();
+  const ip = raw.replace(/^\[|\]$/g, '').slice(0, 45);
+  if (!/^[0-9a-fA-F:.]{3,45}$/.test(ip)) return null;    // never store a header verbatim
+  if (AUDIT_IP === 'full') return ip;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return ip.replace(/\.\d{1,3}$/, '.0/24');
+  const g = ip.split(':').filter(Boolean).slice(0, 3).join(':');
+  return g ? g + '::/48' : null;
+}
+
+function auditLines() {
+  let text;
+  try { text = fs.readFileSync(auditFile, 'utf8'); } catch { return []; }
+  const rows = [];
+  for (const line of text.split('\n')) {
+    if (!line) continue;
+    try { const r = JSON.parse(line); if (r && r.id && r.ev) rows.push(r); } catch { /* torn line */ }
+  }
+  return rows;
+}
+// Retention is a cap, not an archive: age first, then the newest AUDIT_MAX of what's left.
+function auditKeep(rows) {
+  let out = rows;
+  if (AUDIT_DAYS) { const cut = Date.now() - AUDIT_DAYS * 86400000; out = out.filter(r => r.ts >= cut); }
+  if (AUDIT_MAX && out.length > AUDIT_MAX) out = out.slice(out.length - AUDIT_MAX);
+  return out;
+}
+function compactAudit() {
+  const rows = auditLines();
+  for (const r of rows) if (+r.id > auditSeq) auditSeq = +r.id;
+  const keep = auditKeep(rows);
+  auditCount = keep.length;
+  if (keep.length === rows.length) return;
+  try { atomicWrite(auditFile, keep.map(r => JSON.stringify(r)).join('\n') + (keep.length ? '\n' : '')); }
+  catch (e) { console.error('audit compact failed', e.message); }
+}
+
+// Never throws: a log that can't be written must not break signing in.
+function audit(req, ev, f = {}) {
+  if (!AUDIT_ON) return;
+  const rec = { id: ++auditSeq, ts: Date.now(), ev, ok: f.ok !== false };
+  if (f.user) { rec.uid = f.user.id; rec.name = String(f.user.name || '').slice(0, 40); }
+  else {
+    if (f.uid) rec.uid = f.uid;
+    if (f.name) rec.name = String(f.name).slice(0, 40);
+  }
+  if (f.target) { rec.tgt = f.target.id; rec.tname = String(f.target.name || '').slice(0, 40); }
+  if (f.msg) rec.msg = String(f.msg).slice(0, 120);
+  const ip = clientIp(req);
+  if (ip) rec.ip = ip;
+  try { fs.appendFileSync(auditFile, JSON.stringify(rec) + '\n'); }
+  catch (e) { return console.error('audit write failed', e.message); }
+  // Amortized: a 5000-event cap rewrites the file once per ~1250 events.
+  if (AUDIT_MAX && ++auditCount > AUDIT_MAX * 1.25) compactAudit();
+}
+if (AUDIT_ON) {
+  compactAudit();                                // prune on boot, seed auditSeq/auditCount
+  setInterval(compactAudit, 3600000).unref();    // honour AUDIT_DAYS on an idle instance too
+}
+
+// What a Better Auth path under /api/auth/ means in the log. Better Auth owns sign-in, sign-up
+// and sign-out in this fork, so the events are derived from the route it handled and the status
+// it answered with, rather than being emitted by hand-written handlers as upstream does.
+// Anything unlisted is not logged: the session-read endpoints fire on every page load and would
+// bury the events that matter.
+const AUTH_EVENTS = [
+  [/^passkey\/(verify-authentication|authenticate)/, 'auth.login'],
+  [/^sign-in\//, 'auth.login'],
+  [/^sign-up\//, 'auth.register'],
+  [/^passkey\/(verify-registration|register)/, 'auth.passkey.add'],
+  [/^passkey\/delete-passkey/, 'auth.passkey.remove'],
+  [/^sign-out/, 'auth.logout'],
+  [/^revoke-sessions/, 'auth.logout.all'],
+  [/^magic-link\/verify/, 'auth.recovery.use'],
+  [/^sign-in\/magic-link/, 'auth.recovery.send'],
+  [/^verify-email/, 'auth.email.verify'],
+];
+const authEventFor = rest => (AUTH_EVENTS.find(([re]) => re.test(rest)) || [])[1] || null;
+
+// Log the outcome of a Better Auth call. The user is taken from the response body, which is
+// where it is on a successful sign-in — the session cookie is on the way OUT, so re-reading the
+// request would find nobody. Body capture is capped and wrapped: this must never be the reason
+// an authentication fails.
+function auditAuthCall(req, res, rest) {
+  const ev = authEventFor(rest);
+  if (!AUDIT_ON || !ev) return;
+  const write = res.write.bind(res), end = res.end.bind(res);
+  let body = '', over = false;
+  const grab = chunk => {
+    if (over || !chunk) return;
+    try {
+      body += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+      if (body.length > 4096) { over = true; body = body.slice(0, 4096); }
+    } catch { over = true; }
+  };
+  res.write = (chunk, ...a) => { grab(chunk); return write(chunk, ...a); };
+  res.end = (chunk, ...a) => {
+    grab(chunk);
+    try {
+      const ok = res.statusCode < 400;
+      let u = null;
+      try { const b = JSON.parse(body); u = b?.user || b?.data?.user || null; } catch { /* not JSON */ }
+      const f = { ok };
+      if (u && u.id) f.user = u;
+      // A failure says only what the status was. Better Auth's message can carry the address
+      // someone typed, and an audit log is the wrong place for a stranger's guesses.
+      if (!ok) f.msg = 'http-' + res.statusCode;
+      // Uniform `.ok`/`.fail` suffix on every auth event. Upstream suffixes login and register
+      // but writes logout flat; one rule is easier to filter on and to label, and this fork's
+      // log starts empty, so there is no history to stay compatible with.
+      audit(req, ev + (ok ? '.ok' : '.fail'), f);
+    } catch (e) { console.error('audit auth failed', e.message); }
+    return end(chunk, ...a);
+  };
+}
+
+
 /* ---------- routes ---------- */
 const routes = {
   'GET /api/health': async (req, res) => json(res, 200, { ok: true, users: await countUsers() }),
 
   // Public config the login screen needs before anyone is signed in.
-  'GET /api/config': async (req, res) => json(res, 200, { invite_only: INVITE_ONLY, recovery: mailEnabled() }),
+  'GET /api/config': async (req, res) => json(res, 200, { invite_only: INVITE_ONLY, recovery: mailEnabled(), allow_guest: ALLOW_GUEST }),
 
   'GET /api/me': async (req, res) => {
     const user = await readSession(req);
@@ -320,6 +478,9 @@ const routes = {
       console.error('verification mail', e.message);
       return json(res, 502, { error: 'saved, but the confirmation email could not be sent' });
     }
+    // The address is not logged — it is the one field here that is personal data belonging to
+    // someone other than the account holder's own name, and the event alone is the useful part.
+    audit(req, 'auth.recovery.set', { user });
     json(res, 200, { ok: true, email: r.email });
   },
 
@@ -365,7 +526,7 @@ const routes = {
   },
 
   'POST /api/admin/user/disable': async (req, res) => {
-    if (!(await requireAdmin(req, res))) return;
+    const admin = await requireAdmin(req, res); if (!admin) return;
     const body = await readBody(req);
     const u = await findUser(body.id);
     if (!u) return json(res, 404, { error: 'no such user' });
@@ -373,6 +534,7 @@ const routes = {
     const disabled = !!body.disabled;
     await setBanned(u.id, disabled);
     if (disabled) presence.delete(u.id);   // drop them off "training now" at once
+    audit(req, disabled ? 'admin.user.disable' : 'admin.user.enable', { user: admin, target: u });
     json(res, 200, { ok: true, id: u.id, disabled });
   },
 
@@ -396,17 +558,53 @@ const routes = {
     const invite = { code, note: String(body.note || '').slice(0, 60), createdBy: admin.id, created: new Date().toISOString() };
     db.invites.push(invite);
     saveDb();
+    // The code itself is not logged: it is a bearer secret until it is used, and the log is
+    // readable by every admin. The note is what identifies it to a person.
+    audit(req, 'admin.invite.create', { user: admin, msg: invite.note || code.slice(0, 4) + '…' });
     json(res, 200, { invite });
   },
 
   'POST /api/admin/invites/revoke': async (req, res) => {
-    if (!(await requireAdmin(req, res))) return;
+    const admin = await requireAdmin(req, res); if (!admin) return;
     const body = await readBody(req);
     const inv = db.invites.find(i => i.code === String(body.code || '').toUpperCase());
     if (!inv) return json(res, 404, { error: 'no such code' });
     if (inv.usedBy) return json(res, 400, { error: 'already used — cannot revoke' });
     db.invites = db.invites.filter(i => i.code !== inv.code);
     saveDb();
+    audit(req, 'admin.invite.revoke', { user: admin, msg: inv.note || inv.code.slice(0, 4) + '…' });
+    json(res, 200, { ok: true });
+  },
+
+  /* ---------- activity log ---------- */
+  'GET /api/admin/audit': async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    const q = new URL(req.url, 'http://x').searchParams;
+    const limit = Math.max(1, Math.min(200, +q.get('limit') || 100));
+    const before = +q.get('before') || Infinity;
+    const cat = q.get('cat') || '';
+    let rows = auditKeep(auditLines()).reverse();
+    if (cat === 'fail') rows = rows.filter(r => !r.ok);
+    else if (cat) rows = rows.filter(r => String(r.ev).startsWith(cat + '.'));
+    const page = rows.filter(r => r.id < before).slice(0, limit);
+    json(res, 200, {
+      events: page,
+      total: rows.length,
+      nextBefore: page.length === limit ? page[page.length - 1].id : null,
+      enabled: AUDIT_ON, ip_mode: AUDIT_IP,
+      retention: { max: AUDIT_MAX, days: AUDIT_DAYS },
+      now: Date.now()
+    });
+  },
+
+  // Deleting the log is itself logged, and auditSeq is not reset — so a clear always leaves a
+  // visible gap in the ids and can't be used to quietly erase a trace. There is no export route:
+  // audit.log already is the export, in a format jq reads directly.
+  'POST /api/admin/audit/clear': async (req, res) => {
+    const admin = await requireAdmin(req, res); if (!admin) return;
+    try { fs.unlinkSync(auditFile); } catch { /* nothing logged yet */ }
+    auditCount = 0;
+    audit(req, 'admin.audit.clear', { user: admin });
     json(res, 200, { ok: true });
   }
 };
@@ -440,6 +638,7 @@ http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
   if (url.pathname.startsWith('/api/auth/')) {
+    auditAuthCall(req, res, url.pathname.slice('/api/auth/'.length));
     try { return await authHandler(req, res); }
     catch (e) {
       console.error('auth', url.pathname, e);

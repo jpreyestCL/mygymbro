@@ -12,3 +12,8 @@ dist/
 
 .DS_Store
 api/node_modules/
+
+# A clone of the upstream project (gitlab.com/DuarteSantos8/opengym), kept alongside for
+# comparing against this fork. It carries its own .git, so committing it would land a broken
+# gitlink rather than the files.
+opengym/
