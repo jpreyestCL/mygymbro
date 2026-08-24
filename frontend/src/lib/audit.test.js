@@ -10,8 +10,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const SERVER = fs.readFileSync(path.join(process.cwd(), '..', 'api', 'server.js'), 'utf8')
+const COACH_ROUTES = (() => {
+  try { return fs.readFileSync(path.join(process.cwd(), '..', 'api', 'coach', 'routes.js'), 'utf8') }
+  catch { return '' }
+})()
 
-const literalEvents = [...SERVER.matchAll(/\baudit\(\s*req\s*,\s*'([a-z][a-z0-9.]*)'/g)].map(m => m[1])
+const literalEvents = [...`${SERVER}\n${COACH_ROUTES}`.matchAll(/\baudit(?:\?.)?\(\s*req\s*,\s*'([a-z][a-z0-9.]*)'/g)].map(m => m[1])
 const authBases = [...SERVER.matchAll(/^\s*\[\/.*?\/,\s*'([a-z][a-z0-9.]*)'\],\s*$/gm)].map(m => m[1])
 const EVENTS = [...new Set([
   ...literalEvents,
