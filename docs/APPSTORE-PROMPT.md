@@ -5,7 +5,7 @@ Apple Developer account. It cannot be done from a machine without that account.
 
 ---
 
-You are finishing the App Store submission for an iOS app called **Workset**. The codebase,
+You are finishing the App Store submission for an iOS app called **MyGymBro**. The codebase,
 native features and server are done and verified; what remains is the Apple side.
 
 ## Context you need
@@ -81,7 +81,7 @@ If (3) does nothing, check Settings → Face ID & Passcode → Live Activities i
 
 ### 4. App Store Connect
 
-Create the app record: name **Workset**, primary language English, bundle id `cl.rlz.workset`,
+Create the app record: name **MyGymBro**, primary language English, bundle id `cl.rlz.workset`,
 SKU `workset-ios`. Then fill in, copying from `docs/APPSTORE.md`:
 
 - Subtitle, promotional text, description, keywords — written there, use verbatim.

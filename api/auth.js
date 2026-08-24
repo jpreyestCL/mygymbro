@@ -25,7 +25,7 @@ import path from 'node:path'
 
 const ORIGIN = process.env.ORIGIN || 'http://localhost:8080'
 const RP_ID = process.env.RP_ID || 'localhost'
-const RP_NAME = process.env.RP_NAME || 'Workset'
+const RP_NAME = process.env.RP_NAME || 'MyGymBro'
 
 const INVITE_ONLY = /^(1|true|yes|on)$/i.test(process.env.INVITE_ONLY || '')
 const DATA = process.env.DATA_DIR || '/data'

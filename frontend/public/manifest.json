@@ -1,6 +1,6 @@
 {
-  "name": "Workset",
-  "short_name": "Workset",
+  "name": "MyGymBro",
+  "short_name": "MyGymBro",
   "description": "Personal gym & body weight tracker",
   "start_url": "./",
   "scope": "./",

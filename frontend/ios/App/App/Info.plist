@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Workset</string>
+        <string>MyGymBro</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -49,9 +49,9 @@
 	     App Review reads them: they must say what the app does with the data, not what the
 	     API is called. -->
 	<key>NSHealthShareUsageDescription</key>
-	<string>Workset reads your body weight from Health so your weigh-ins are already there and you never type the same number twice.</string>
+	<string>MyGymBro reads your body weight from Health so your weigh-ins are already there and you never type the same number twice.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Workset saves the weight you log before a workout to Health, so the rest of your apps see it too.</string>
+	<string>MyGymBro saves the weight you log before a workout to Health, so the rest of your apps see it too.</string>
 	<!-- Without this the rest timer's Live Activity silently never starts. -->
 	<key>NSSupportsLiveActivities</key>
 	<true/>

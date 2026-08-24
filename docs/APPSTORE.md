@@ -1,4 +1,4 @@
-# Workset — App Store submission
+# MyGymBro — App Store submission
 
 Everything that can be prepared without an Apple Developer account is done and in the repo.
 What remains needs the account, a Mac signed into it, and the App Store Connect web UI.
@@ -13,7 +13,7 @@ has access to those.
 | Piece | State |
 |---|---|
 | Bundle id `cl.rlz.workset` | done |
-| Display name **Workset** | done |
+| Display name **MyGymBro** | done |
 | App icon 1024×1024 + splash | generated from `frontend/resources/icon.svg` |
 | Associated Domains entitlement | done — **needs the real Team ID** |
 | `apple-app-site-association` | served at `https://mygym.rlz.cl/.well-known/apple-app-site-association` — **contains `TEAMID` placeholder** |
@@ -42,7 +42,7 @@ entitlement so iOS fetches it from the domain directly.
 
 ## Store listing copy
 
-**Name:** Workset
+**Name:** MyGymBro
 **Subtitle:** Lift, log, and see the pattern
 
 **Promotional text (170 chars max):**
@@ -54,7 +54,7 @@ gym,workout,lifting,strength,tracker,log,training,sets,reps,progressive,overload
 ```
 
 **Description:**
-> Workset remembers what you lifted so you don't have to.
+> MyGymBro remembers what you lifted so you don't have to.
 >
 > Open today's session and the weights are already there — the ones you used last time,
 > adjusted by the progression rule you picked. Every target tells you why it's that number.
@@ -73,7 +73,7 @@ gym,workout,lifting,strength,tracker,log,training,sets,reps,progressive,overload
 >
 > **Your body weight, shared with Health**
 > Weigh-ins go to Apple Health as you log them, and weights from your scale come back in.
-> Body weight only — Workset never reads your workouts or heart rate.
+> Body weight only — MyGymBro never reads your workouts or heart rate.
 >
 > **Bring your history**
 > Import from FitNotes, Strong or Hevy. Exercise names are matched against a library of 1,324
@@ -101,7 +101,7 @@ Answer **No** to "used for tracking" everywhere, and do not link any data to thi
 
 ## Review notes (paste into App Review Information)
 
-> Workset is a strength-training log. Sign-in uses passkeys, so there is no demo username or
+> MyGymBro is a strength-training log. Sign-in uses passkeys, so there is no demo username or
 > password to provide: tap **Create new profile**, enter any name, and confirm with the
 > simulator's or device's biometric prompt. That creates a working account with no email
 > required. Registration is open — no invite code is needed.

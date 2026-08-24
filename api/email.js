@@ -9,7 +9,7 @@
 // what happened and callers surface it.
 
 const KEY = process.env.RESEND_API_KEY || ''
-const FROM = process.env.MAIL_FROM || 'Workset <noreply@rlz.cl>'
+const FROM = process.env.MAIL_FROM || 'MyGymBro <noreply@rlz.cl>'
 
 export const mailEnabled = () => !!KEY
 
@@ -41,14 +41,14 @@ export async function send({ to, subject, html, text }) {
  * explicit "ignore this" for the case that matters most — someone else typing your address.
  */
 export const recoveryEmail = (url, name) => ({
-  subject: 'Sign in to Workset',
+  subject: 'Sign in to MyGymBro',
   text: `Hi ${name || 'there'},\n\nUse this link to sign in and set up a new passkey:\n${url}\n\n`
     + `It expires in 10 minutes and works once.\n\n`
     + `If you didn't ask for this, you can ignore it — nothing has changed on your account.`,
   html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;line-height:1.55;color:#111">
   <p>Hi ${name || 'there'},</p>
   <p>Use this link to sign in and set up a new passkey:</p>
-  <p><a href="${url}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600">Sign in to Workset</a></p>
+  <p><a href="${url}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600">Sign in to MyGymBro</a></p>
   <p style="color:#666;font-size:14px">It expires in 10 minutes and works once.</p>
   <p style="color:#666;font-size:14px">If you didn't ask for this, you can ignore it — nothing has changed on your account.</p>
 </div>`,
