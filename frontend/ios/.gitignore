@@ -1,5 +1,8 @@
 App/build
 App/Pods
+# Generated when EAS Build runs pod install from ios/ — see scripts/gen-eas-podfile.mjs.
+/Pods
+/App.xcworkspace
 App/output
 App/App/public
 DerivedData
