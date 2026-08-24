@@ -39,11 +39,10 @@ No account on someone else's server, no subscription, no ads. Just `docker compo
 
 <div align="center">
 
-### [🌐 opengym.duarte-santos.ch](https://opengym.duarte-santos.ch) · [▶ Try the live demo](https://duartesantos8.github.io/openGym/)
+### [🌐 mygym.rlz.cl](https://mygym.rlz.cl) · [▶ Try the live demo](https://mygym.rlz.cl)
 
-No signup, nothing to install — it runs entirely in your browser on example data.<br>
-<sub>There's no server behind the demo, so passkey sign-in, sync across devices and the
-admin dashboard only exist in a self-hosted instance.</sub>
+The live instance is at **[mygym.rlz.cl](https://mygym.rlz.cl)** — open it in your browser,
+nothing to install.
 
 </div>
 
