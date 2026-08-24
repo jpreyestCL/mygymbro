@@ -1,0 +1,15 @@
+{
+  "webcredentials": {
+    "apps": ["TEAMID.cl.rlz.workset"]
+  },
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID.cl.rlz.workset"],
+        "components": [
+          { "/": "/auth/*", "comment": "recovery and verification links open in the app" }
+        ]
+      }
+    ]
+  }
+}
