@@ -9,6 +9,10 @@ import webpush from 'web-push';
 import { auth, isAdmin as isAdminUser, TRUSTED_ORIGINS, listUsers, findUser, setBanned, countUsers, setRecoveryEmail } from './auth.js';
 import { mailEnabled } from './email.js';
 import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
+import * as coachConfig from './coach/config.js';
+import * as coachJobs from './coach/jobs.js';
+import { coachRoutes } from './coach/routes.js';
+import { startCadence } from './coach/cadence.js';
 
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
@@ -27,6 +31,20 @@ const MAX_BODY = 5 * 1024 * 1024;
 const SECURE = /^https:/i.test(ORIGIN) ? ' Secure;' : '';
 
 fs.mkdirSync(DATA, { recursive: true });
+
+/* The secrets are locked down file by file rather than by sealing the whole directory.
+ *
+ * Coach credentials are encrypted with a key derived from $DATA_DIR/secret. Sessions no
+ * longer use this file (Better Auth has BETTER_AUTH_SECRET); we still mint one so an
+ * instance that never had the old cookie secret can store a provider token.
+ *
+ * Best-effort throughout: a bind-mounted host filesystem may refuse chmod, and that is not a
+ * reason to refuse to boot. The privilege drop in adapters/spawn.js is the control that does
+ * fail closed. */
+const secretFile = path.join(DATA, 'secret');
+if (!fs.existsSync(secretFile)) fs.writeFileSync(secretFile, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
+const lock = f => { try { fs.chmodSync(path.join(DATA, f), 0o600); } catch { /* not present yet, or host says no */ } };
+['secret', 'db.json', 'coach.json'].forEach(lock);
 
 /* ---------- secret + db ---------- */
 const dbFile = path.join(DATA, 'db.json');
@@ -112,8 +130,22 @@ function userNow(tz) {
       year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
     }).formatToParts(new Date());
     const g = t => parts.find(p => p.type === t)?.value;
-    return { date: `${g('year')}-${g('month')}-${g('day')}`, hhmm: `${g('hour')}:${g('minute')}` };
+    const date = `${g('year')}-${g('month')}-${g('day')}`;
+    // Weekday is derived from the zone's own date, not the server's — a Sunday-evening review
+    // has to be Sunday where the user is, which is what the reminder already assumes for time.
+    return { date, hhmm: `${g('hour')}:${g('minute')}`, weekday: new Date(date + 'T12:00:00Z').getUTCDay() };
   } catch { return null; } // unknown/invalid tz string — skip this user rather than guess
+}
+
+// Cadence only needs a uid. Identity lives in Postgres now, but Coach consent lives in the
+// state file, so listing those files keeps the tick off the database (same reason the
+// reminder ticker is driven by push subscriptions rather than the user table).
+function coachUsers() {
+  try {
+    return fs.readdirSync(DATA)
+      .filter(f => /^state-[A-Za-z0-9_-]+\.json$/.test(f))
+      .map(f => ({ id: f.slice('state-'.length, -'.json'.length) }));
+  } catch { return []; }
 }
 // Driven by who has a push subscription rather than by the user table: identity lives in
 // Postgres now, but a reminder only needs a device to send to and a plan to read, both of
@@ -372,7 +404,10 @@ const routes = {
   'GET /api/health': async (req, res) => json(res, 200, { ok: true, users: await countUsers() }),
 
   // Public config the login screen needs before anyone is signed in.
-  'GET /api/config': async (req, res) => json(res, 200, { invite_only: INVITE_ONLY, recovery: mailEnabled(), allow_guest: ALLOW_GUEST }),
+  'GET /api/config': async (req, res) => {
+    const coach = coachConfig.publicConfig();
+    json(res, 200, { invite_only: INVITE_ONLY, recovery: mailEnabled(), allow_guest: ALLOW_GUEST, ...(coach ? { coach } : {}) });
+  },
 
   'GET /api/me': async (req, res) => {
     const user = await readSession(req);
@@ -606,8 +641,39 @@ const routes = {
     auditCount = 0;
     audit(req, 'admin.audit.clear', { user: admin });
     json(res, 200, { ok: true });
-  }
+  },
+
+  /* ---------- AI Coach ---------- */
+  // Routes live in coach/routes.js and are handed the helpers above rather than importing
+  // them. Sessions are async (Better Auth), so every handler in that module awaits
+  // readSession/requireAdmin. Every one of them is inert while the feature is unconfigured.
+  ...coachRoutes({ json, readBody, readSession, requireAdmin, audit })
 };
+
+/* ---------- Coach: boot recovery, notifications, scheduled reviews ---------- */
+// A job that was running when the process died is not coming back; say so rather than leaving
+// a spinner that never resolves.
+coachJobs.recoverOnBoot();
+// A ready proposal is the one Coach event worth a notification. Failures and "nothing to
+// change" stay silent on purpose (FR-38/E4).
+coachJobs.setProposalHook((uid, pending) => {
+  if (pending?.bundle) {
+    sendPush(uid, {
+      title: 'Your Coach has a plan',
+      body: pending.summary || 'A new plan is ready to review',
+      tag: 'coach-proposal', url: '#/coach/proposal'
+    });
+    return;
+  }
+  const n = (pending?.changes || []).length;
+  if (!n) return;
+  sendPush(uid, {
+    title: 'Your Coach has been reading',
+    body: n === 1 ? '1 suggestion after this week' : `${n} suggestions after this week`,
+    tag: 'coach-proposal', url: '#/coach'
+  });
+});
+startCadence({ users: coachUsers, userNow });
 
 // Better Auth serves everything under /api/auth (sign-up, sign-in, sessions, passkeys).
 const authHandler = toNodeHandler(auth);

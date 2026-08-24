@@ -25,7 +25,12 @@ services:
   # image: prebuilt (docker compose pull). build: from source (docker compose up --build).
   api:
     image: ghcr.io/duartesantos8/opengym-api:latest
-    build: ./api
+    # Default target: no AI runtime, no AI dependency — existing deploys stay AI-free.
+    # To opt into the AI Coach, build the other target instead:
+    #     API_TARGET=coach docker compose up --build api
+    build:
+      context: ./api
+      target: ${API_TARGET:-default}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -33,6 +38,9 @@ services:
       - DATA_DIR=/data
     volumes:
       - ./data:/data         # users, passkeys, per-user state, session secret — BACK THIS UP
+      # Provider credential cache (Codex). A sibling of ./data on purpose: the documented backup
+      # is `tar czf … data/`, and a live refresh token must not end up inside it.
+      - ./coach-auth:/coach-auth
 
   # Builds the React frontend (multi-stage) and serves it, proxying /api → api
   # and the exercise media from the shared volume. Single origin for passkeys.

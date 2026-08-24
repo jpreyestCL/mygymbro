@@ -25,6 +25,9 @@ import History from './views/History.jsx'
 import Library from './views/Library.jsx'
 import Settings from './views/Settings.jsx'
 import Admin from './views/Admin.jsx'
+import Coach from './views/Coach.jsx'
+import CoachIntake from './views/CoachIntake.jsx'
+import CoachProposal from './views/CoachProposal.jsx'
 
 bindUI(useUI)   // lets the shared controls open sheets without importing the store at module scope
 
@@ -76,6 +79,13 @@ function Shell() {
               <Route path="/history" element={<History />} />
               <Route path="/library" element={<Library />} />
               <Route path="/settings" element={<Settings />} />
+              {/* The Coach screens gate themselves (signed-in user + instance config; guests
+                  never see it). Routes exist unconditionally so a deep link from a
+                  notification lands somewhere sane rather than on the catch-all. Hash
+                  routes work on file:// / Capacitor. */}
+              <Route path="/coach" element={<Coach />} />
+              <Route path="/coach/intake" element={<CoachIntake />} />
+              <Route path="/coach/proposal" element={<CoachProposal />} />
               <Route path="/admin" element={user?.admin ? <Admin /> : <Navigate to="/home" replace />} />
               <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>

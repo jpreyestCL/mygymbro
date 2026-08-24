@@ -66,3 +66,34 @@ export async function shareExport(json, filename) {
   const w = await Filesystem.writeFile({ path: filename, directory: Directory.Cache, data: json, encoding: Encoding.UTF8 })
   await Share.share({ title: filename, url: w.uri })
 }
+
+// Rest-timer alert on Capacitor. IDs 100–106 are the weekday workout reminders — do not
+// reuse them. There is no service worker in the native shell, so this is the only path
+// that can still fire after the WebView is suspended.
+const REST_NOTIF_ID = 200
+export async function scheduleRestNotification(seconds) {
+  if (!MOBILE) return
+  try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications')
+    await LocalNotifications.cancel({ notifications: [{ id: REST_NOTIF_ID }] }).catch(() => {})
+    if (!(seconds > 0)) return
+    let perm = await LocalNotifications.checkPermissions()
+    if (perm.display !== 'granted') perm = await LocalNotifications.requestPermissions()
+    if (perm.display !== 'granted') return
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: REST_NOTIF_ID,
+        title: t('Rest over — next set!'),
+        body: t('Rest over — next set!'),
+        schedule: { at: new Date(Date.now() + seconds * 1000), allowWhileIdle: true },
+      }]
+    })
+  } catch {}
+}
+export async function cancelRestNotification() {
+  if (!MOBILE) return
+  try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications')
+    await LocalNotifications.cancel({ notifications: [{ id: REST_NOTIF_ID }] })
+  } catch {}
+}

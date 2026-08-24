@@ -9,6 +9,7 @@ import { auditCat, auditLine, fmtWhen } from '../lib/audit.js'
 import { confirmSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Button } from '../components/ui.jsx'
+import AdminCoach from './AdminCoach.jsx'
 
 // Admin-only operator dashboard (owner passkey + admin flag; guarded again server-side).
 // Deliberately English-only — it isn't part of the translated end-user surface, so it stays
@@ -194,6 +195,10 @@ export default function Admin() {
         <span className="tag acc">{dur(Date.now() - u.live.startedAt)}</span>
       </div>)}
     </div>}
+
+    {/* Renders nothing at all unless the instance offers the Coach, so an admin page on a
+        box that never enabled it is byte-for-byte the page it was before. */}
+    <AdminCoach />
 
     <InvitesCard invites={invites} reload={loadInvites} />
 
