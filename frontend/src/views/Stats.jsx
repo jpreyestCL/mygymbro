@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { EXIDX } from '../lib/exercises.js'
-import { lastBW, streakWeeks, setLabel, modeOf, effortOf } from '../lib/history.js'
+import { lastBW, streakWeeks, setLabel, modeOf, effortOf, metricModeForEntry, metricRowsForEntry, bestWeightForEntry } from '../lib/history.js'
 import { fmtNum, fmtDate, fmtVol, todayISO, weekKey } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
 import { bwSheet, goalSheet, calendarSheet, workoutDetailSheet, WorkoutRow, bwDeltaColor } from '../sheets.jsx'
@@ -314,17 +314,34 @@ export default function Stats() {
     .map(b => ({ t: b.t || new Date(b.d).getTime(), y: b.w, d: b.d }))
   const bw30 = S.bodyweight.filter(b => (b.t || new Date(b.d).getTime()) > now - 30 * 86400000)
   const bwDelta30 = bw30.length > 1 ? bw30[bw30.length - 1].w - bw30[0].w : null
-  const monthW = S.workouts.filter(w => w.d.slice(0, 7) === todayISO().slice(0, 7)).length
+  const workouts = S.workouts
+  const monthW = workouts.filter(w => String(w.d || '').slice(0, 7) === todayISO().slice(0, 7)).length
 
-  const exHist = [...new Set(S.workouts.flatMap(w => w.entries.map(e => e.id)))].filter(id => EXIDX[id]).sort((a, b) => EXIDX[a].n < EXIDX[b].n ? -1 : 1)
+  const nameOf = id => EXIDX[id]?.n || workouts.flatMap(w => w.entries).find(e => e.id === id)?.n || id
+  const currentOf = id => {
+    for (let i = workouts.length - 1; i >= 0; i--) {
+      const en = workouts[i].entries.find(e => e.id === id)
+      if (!en) continue
+      const mode = metricModeForEntry(en) || modeOf({ id })
+      const rows = metricRowsForEntry(en, mode)
+      const mx = mode === 'reps' ? bestWeightForEntry(en, S) : Math.max(0, ...rows.map(s => mode === 'cardio' ? (s.speed || 0) : mode === 'time' ? (s.sec || 0) : (s.w || 0)))
+      if (mx > 0) return { mx, unit: mode === 'cardio' ? 'km/h' : mode === 'time' ? 's' : S.unit }
+    }
+    return { mx: 0, unit: S.unit }
+  }
+  const exHist = [...new Set(workouts.flatMap(w => w.entries.map(e => e.id)))].filter(id => EXIDX[id] || nameOf(id) !== id)
+  const exCurrent = Object.fromEntries(exHist.map(id => [id, currentOf(id)]))
+  exHist.sort((a, b) => exCurrent[b].mx - exCurrent[a].mx || nameOf(a).localeCompare(nameOf(b)))
   const curEx = exId && exHist.includes(exId) ? exId : exHist[0] || null
-  // How this exercise was logged most recently decides what the curve means: top weight,
-  // longest hold or top speed. Sets logged in another mode lack the field and score 0, so a
-  // switched exercise drops its old points instead of mixing seconds into a weight chart.
+  // A completed reps work row is authoritative for strength metrics, even when the parent
+  // target also contains timed/cardio work. Entries without reps rows use their selected mode.
   const curMode = curEx ? (() => {
-    for (let i = S.workouts.length - 1; i >= 0; i--) {
-      const en = S.workouts[i].entries.find(e => e.id === curEx)
-      if (en) return modeOf({ ...(en.target || {}), id: curEx })
+    for (let i = workouts.length - 1; i >= 0; i--) {
+      const en = workouts[i].entries.find(e => e.id === curEx)
+      if (en) {
+        const mode = metricModeForEntry(en)
+        if (mode) return mode
+      }
     }
     return modeOf({ id: curEx })
   })() : 'reps'
@@ -334,16 +351,25 @@ export default function Stats() {
   const exUnit = curCardio ? 'km/h' : curTimed ? 's' : S.unit
   let exPts = [], exList = [], exBest = 0
   if (curEx) {
-    S.workouts.forEach(w => {
+    workouts.forEach(w => {
       const en = w.entries.find(e => e.id === curEx)
-      if (en) { const mx = Math.max(0, ...en.sets.filter(s => s.done).map(metric), curCardio || curTimed ? 0 : (en.topW || 0)); if (mx > 0) { exPts.push({ t: w.start, y: mx, d: w.d, sets: en.sets.filter(s => s.done), target: en.target }); if (mx > exBest) exBest = mx } }
+      if (en) {
+        const loggedMode = metricModeForEntry(en)
+        if (loggedMode !== curMode) return
+        const doneSets = metricRowsForEntry(en, curMode)
+        const mx = curMode === 'reps' ? bestWeightForEntry(en, S) : Math.max(0, ...doneSets.map(metric))
+        if (mx > 0) {
+          exPts.push({ t: w.start, y: mx, d: w.d, sets: doneSets, target: en.target })
+          if (mx > exBest) exBest = mx
+        }
+      }
     })
     exList = exPts.slice(-5).reverse()
   }
   // Estimated 1RM (issue #18) — only reps-mode training produces one, so cardio and timed
   // work simply have no points and the toggle stays hidden.
-  const e1Pts = curEx ? e1rmSeries(S, curEx) : []
-  const e1Best = curEx ? best1RM(S, curEx) : null
+  const e1Pts = curEx && curMode === 'reps' ? e1rmSeries(S, curEx) : []
+  const e1Best = curEx && curMode === 'reps' ? best1RM(S, curEx) : null
   const showE1 = e1Pts.length > 0
   // Effort on this exercise, per session. It rides on the top-set curve as well as having a
   // curve of its own, because the two only mean something together: the same weight moved
@@ -401,7 +427,7 @@ export default function Stats() {
         {exHist.length ? <>
           <div className="sect-b" style={{ marginBottom: 10 }}>
             <SelectRow title={t('Exercise')} sheetTitle={t('Exercise progress')} value={curEx} onChange={setExId}
-              options={exHist.map(id => ({ value: id, label: EXIDX[id].n }))} />
+              options={exHist.map(id => ({ value: id, label: nameOf(id) }))} />
           </div>
           {exOpts.length > 1 && <Segmented className="seg-range" value={onEff ? 'effort' : onE1 ? 'e1rm' : 'top'} onChange={setExMetric} options={exOpts} />}
           <div className="chart">

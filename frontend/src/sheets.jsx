@@ -15,7 +15,9 @@ import Icon from './components/Icon.jsx'
 import { Button, Slider, Switch, Segmented, SelectRow, Row } from './components/ui.jsx'
 import { glyphOf, GLYPH_GROUPS, DEFAULT_GLYPH } from './lib/glyphs.js'
 import BodyMap from './components/BodyMap.jsx'
-import { loadOfWorkouts } from './lib/muscles.js'
+import { loadOfWorkouts, exerciseMuscleSnapshot } from './lib/muscles.js'
+import { buildCompletedWorkout } from './lib/finish-workout.js'
+import { isWarmupRow } from './lib/workout-model.js'
 import { parseImport, mergeImport } from './lib/import-csv.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-share.js'
 import { estimate1RM, best1RM, bestSetOf, is1RMRecord, REP_CAP } from './lib/onerm.js'
@@ -554,8 +556,13 @@ export function deleteCustomEx(ex, afterDelete) {
       update(s => {
         s.customEx = (s.customEx || []).filter(x => x.id !== ex.id)
         s.routines.forEach(r => { r.ex = r.ex.filter(e => e.id !== ex.id); cleanupSg(r.ex) })
-        // stamp the name into history entries so past workouts stay readable
-        s.workouts.forEach(w => w.entries.forEach(e => { if (e.id === ex.id) e.n = ex.n }))
+        // stamp the name (and muscle map, once) so past workouts stay readable after delete
+        s.workouts.forEach(w => w.entries.forEach(e => {
+          if (e.id === ex.id) {
+            e.n = ex.n
+            if (!e.muscleSnapshot) e.muscleSnapshot = exerciseMuscleSnapshot(ex)
+          }
+        }))
         delete s.exWeights[ex.id]
       })
       toast(t('Exercise deleted'))
@@ -1103,25 +1110,22 @@ function doFinishWorkout() {
   const prs = []
   const e1prs = []
   A.entries.forEach(e => {
-    const mx = Math.max(0, ...e.sets.filter(s => s.done).map(s => s.w))
+    const mx = Math.max(0, ...e.sets.filter(s => s.done && !isWarmupRow(s)).map(s => s.w))
     if (mx > 0 && mx > bestWeightFor(st, e.id)) prs.push(e.id)
     // A heavier estimate without a heavier top set is its own kind of progress —
     // same weight for more reps. Reported separately so it can't be read as a load PR.
     const rec = is1RMRecord(st, e.id, e)
     if (rec && !prs.includes(e.id)) e1prs.push({ id: e.id, ...rec })
   })
-  const w = {
-    id: A.id, d: A.d, start: A.start, end: Date.now(), routineId: A.routineId, name: A.name, bw: A.bw,
-    // `target` (what the session prescribed) is kept alongside the sets: without it a
-    // finished workout cannot say whether it hit its reps, and a timed session reads back
-    // as "0 reps". It is what the progression engine works from.
-    entries: A.entries.map(e => ({ id: e.id, sets: e.sets, topW: e.topW || null, target: e.target || null })).filter(e => e.sets.some(s => s.done)),
-    prs
-  }
+  const w = buildCompletedWorkout(A, {
+    end: Date.now(),
+    prs,
+    snapshotFor: e => EXIDX[e.id]?.custom ? exerciseMuscleSnapshot(EXIDX[e.id]) : null,
+  })
   w.vol = workoutVolume(w, st)
   update(s => {
     w.entries.forEach(e => {
-      const mx = Math.max(0, ...e.sets.filter(x => x.done).map(x => x.w || 0), e.topW || 0)
+      const mx = Math.max(0, ...e.sets.filter(x => x.done && !isWarmupRow(x)).map(x => x.w || 0), e.topW || 0)
       if (mx > 0) { const cur = s.exWeights[e.id]; if (!cur || mx > cur.w) s.exWeights[e.id] = { w: mx, d: w.d } }
     })
     s.workouts.push(w)

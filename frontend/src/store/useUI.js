@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { uid } from '../lib/format.js'
 import { beep, vibrate } from '../lib/sound.js'
 import { api } from '../lib/api.js'
-import { restActivityStart, restActivityStop } from '../lib/native.js'
+import { restActivityStart, restActivityStop, restActivityUpdate } from '../lib/native.js'
+import { scheduleRestNotification, cancelRestNotification } from '../lib/mobile.js'
 import { t } from '../lib/i18n.js'
 import { useStore } from './useStore.js'
 
@@ -10,6 +11,42 @@ import { useStore } from './useStore.js'
 // before the local timer completes. No-ops for guests / offline.
 const pushRestTimer = sec => { if (useStore.getState().user) api('/api/push/rest-timer', { method: 'POST', body: JSON.stringify({ seconds: sec }) }).catch(() => {}) }
 const cancelPushRestTimer = () => { if (useStore.getState().user) api('/api/push/rest-timer/cancel', { method: 'POST', body: '{}' }).catch(() => {}) }
+
+const notificationsSupported = () => typeof window !== 'undefined' && 'Notification' in window
+let requestRestNotificationPermissionP = null
+
+const requestRestNotificationPermission = async () => {
+  if (!notificationsSupported()) return false
+  if (Notification.permission === 'granted') return true
+  if (Notification.permission === 'denied') return false
+  if (!requestRestNotificationPermissionP) {
+    requestRestNotificationPermissionP = Notification.requestPermission()
+      .then(perm => perm === 'granted')
+      .catch(() => false)
+      .finally(() => {
+        requestRestNotificationPermissionP = null
+      })
+  }
+  return requestRestNotificationPermissionP
+}
+
+const maybeRestNotification = async () => {
+  if (!notificationsSupported()) return
+  if (!document.hidden && document.visibilityState !== 'hidden') return
+  if (Notification.permission !== 'granted' && !(await requestRestNotificationPermission())) return
+  try {
+    // Android Chrome forbids the Notification constructor (Illegal constructor) - the
+    // service-worker registration path is the one that actually pops there.
+    const reg = await navigator.serviceWorker?.getRegistration?.()
+    if (reg?.showNotification) {
+      reg.showNotification(t('Rest over — next set!'), { body: t('Rest over — next set!') })
+      return
+    }
+    new Notification(t('Rest over — next set!'), { body: t('Rest over — next set!') })
+  } catch {
+    // Intentionally ignore: notification APIs vary by browser and policy in edge cases.
+  }
+}
 
 let toastTm = null
 let timerInt = null
@@ -42,12 +79,14 @@ export const useUI = create((set, get) => ({
   startRest(sec, info) {
     get().stopRest()
     const endsAt = Date.now() + sec * 1000
-    set({ timer: { left: sec, total: sec, endsAt } })
+    set({ timer: { left: sec, total: sec, endsAt, info } })
+    requestRestNotificationPermission()
     pushRestTimer(sec)
     // On iOS the countdown also goes to the Lock Screen and the Dynamic Island, which is the
     // point: between sets the phone is face down on a bench, and the whole reason to unlock
     // it was to see this number.
     restActivityStart(sec, info)
+    scheduleRestNotification(sec)
     timerTick = () => {
       const tm = get().timer
       if (!tm) return
@@ -56,7 +95,10 @@ export const useUI = create((set, get) => ({
       const snd = useStore.getState().S.sound
       if (left <= 0) {
         beep(snd, 880, 0.15); beep(snd, 880, 0.15, 0.25); beep(snd, 1320, 0.4, 0.5)
-        vibrate([200, 100, 200]); get().toast(t('Rest over — next set!')); get().stopRest(); return
+        vibrate([200, 100, 200]); maybeRestNotification(); get().toast(t('Rest over — next set!'))
+        // Keep the scheduled Capacitor notification: canceling here races the fire time
+        // and is what left Android silent when JS was still running in the background.
+        get().stopRest({ keepLocal: true }); return
       }
       if (left <= 3) beep(snd, 660, 0.1)
       set({ timer: { ...tm, left } })
@@ -73,14 +115,17 @@ export const useUI = create((set, get) => ({
     if (left <= 0) { get().stopRest(); return }
     set({ timer: { ...tm, left, total: tm.total + sec, endsAt: tm.endsAt + sec * 1000 } })
     pushRestTimer(left)
+    restActivityUpdate(left, tm.info || {})
+    scheduleRestNotification(left)
   },
-  stopRest() {
+  stopRest({ keepLocal = false } = {}) {
     if (timerInt) clearInterval(timerInt); timerInt = null
     if (timerTick) document.removeEventListener('visibilitychange', timerTick); timerTick = null
     if (get().timer) cancelPushRestTimer()
     // Ends immediately rather than fading: the rest is over the moment the next set starts,
     // and a dead countdown left on the Lock Screen is worse than none.
     restActivityStop()
+    if (!keepLocal) cancelRestNotification()
     set({ timer: null })
   },
 
