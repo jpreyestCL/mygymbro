@@ -18,10 +18,34 @@ import { passkey } from '@better-auth/passkey'
 import { bearer } from 'better-auth/plugins/bearer'
 import { Pool } from 'pg'
 import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 
 const ORIGIN = process.env.ORIGIN || 'http://localhost:8080'
 const RP_ID = process.env.RP_ID || 'localhost'
 const RP_NAME = process.env.RP_NAME || 'Workset'
+
+const INVITE_ONLY = /^(1|true|yes|on)$/i.test(process.env.INVITE_ONLY || '')
+const DATA = process.env.DATA_DIR || '/data'
+
+// Invite codes stayed in db.json when identity moved to Postgres: they are a property of the
+// instance, not of a user, and nothing else needs them. Read at the moment of use rather than
+// cached, because the admin dashboard writes the same file from the same process.
+function burnInvite(code) {
+  const file = path.join(DATA, 'db.json')
+  let db
+  try { db = JSON.parse(fs.readFileSync(file, 'utf8')) } catch { return false }
+  const inv = (db.invites || []).find(i => i.code === code && !i.usedBy && !i.revoked)
+  if (!inv) return false
+  // Marked used here, at the point of no return: the passkey is already verified by the time
+  // resolveUser runs, so a code burned now cannot be spent on a ceremony that then fails.
+  inv.usedBy = 'pending'
+  inv.usedAt = new Date().toISOString()
+  const tmp = file + '.tmp'
+  fs.writeFileSync(tmp, JSON.stringify(db, null, 2))
+  fs.renameSync(tmp, file)
+  return true
+}
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required')
 if (!process.env.BETTER_AUTH_SECRET) throw new Error('BETTER_AUTH_SECRET is required')
@@ -88,6 +112,10 @@ export const auth = betterAuth({
           // parameter; body is read too so a future POST-shaped caller still works.
           const name = String(ctx.query?.name ?? ctx.body?.name ?? '').trim().slice(0, 40)
           if (!name) throw ctx.error('BAD_REQUEST', { message: 'name required' })
+          if (INVITE_ONLY) {
+            const code = String(ctx.query?.code ?? ctx.body?.code ?? '').trim().toUpperCase()
+            if (!burnInvite(code)) throw ctx.error('FORBIDDEN', { message: 'a valid invite code is required' })
+          }
           return { id: crypto.randomUUID(), name, displayName: name }
         },
       },

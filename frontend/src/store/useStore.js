@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { api } from '../lib/api.js'
+import { api, clearAuthToken } from '../lib/api.js'
 import { localTZ } from '../lib/format.js'
 import { registerCustom } from '../lib/exercises.js'
 import { DEMO, DEMO_SEEDED } from '../lib/demo.js'
@@ -78,6 +78,7 @@ export const useStore = create((set, get) => {
   // Everything a sign-out leaves behind on this device, whichever way it was triggered.
   const clearLocalSession = () => {
     get().setUser(null)
+    clearAuthToken()          // native builds hold a bearer token; a cookie clears itself
     localStorage.removeItem('gym_guest')
     localStorage.removeItem('gym_dirty')
     localStorage.removeItem(KEY)
@@ -127,7 +128,7 @@ export const useStore = create((set, get) => {
     },
 
     async signOut() {
-      try { await get().pushState(); await api('/api/logout', { method: 'POST', body: '{}' }) } catch (e) { /* */ }
+      try { await get().pushState(); await api('/api/auth/sign-out', { method: 'POST', body: '{}' }) } catch (e) { /* */ }
       clearLocalSession()
     },
 
@@ -138,7 +139,9 @@ export const useStore = create((set, get) => {
     // would sign the user out of the one place the bump didn't reach. Caller reports the error.
     async signOutAll() {
       await get().pushState()   // never throws — stores gym_dirty and moves on when offline
-      await api('/api/logout/all', { method: 'POST', body: '{}' })
+      // Better Auth revokes every session row for this user, which is what the old `sv`
+      // counter bump did — this device included, hence the local wipe below.
+      await api('/api/auth/revoke-sessions', { method: 'POST', body: '{}' })
       clearLocalSession()
     },
 

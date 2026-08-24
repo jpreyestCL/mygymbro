@@ -5,10 +5,43 @@ export const BIO = IS_APPLE ? 'Face ID / Touch ID' : IS_ANDROID ? 'fingerprint o
 export const VAULT = IS_APPLE ? 'iCloud Keychain' : IS_ANDROID ? 'Google Password Manager' : 'your password manager'
 export const webauthnOK = () => !!(window.PublicKeyCredential && navigator.credentials)
 
-export async function api(path, opts) {
-  const r = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts))
+// Where the API lives. Empty for the web build, which is served from the same origin as the
+// API — that sameness is what lets passkeys and a cookie work at all. The native build sets
+// VITE_API_BASE to the absolute server URL, because inside Capacitor the page is
+// capacitor://localhost and a relative /api/... would resolve to the app bundle.
+export const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+
+// A cookie cannot cross that origin change, so the native build authenticates with a bearer
+// token instead. The server hands it over in a `set-auth-token` header on sign-in; from then
+// on it rides on every request. Web builds never see one and keep using the cookie.
+const TOKEN_KEY = 'gym_auth_token'
+export const authToken = () => { try { return localStorage.getItem(TOKEN_KEY) } catch { return null } }
+const setAuthToken = t => { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY) } catch { /* */ } }
+export const clearAuthToken = () => setAuthToken(null)
+
+export async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  const tok = authToken()
+  if (tok) headers.Authorization = 'Bearer ' + tok
+  const r = await fetch(API_BASE + path, {
+    ...opts,
+    headers,
+    // Sends the session cookie on the web, and is harmless for the native build, which has
+    // no cookie to send. Requires the server to name this origin explicitly in CORS — it
+    // does; `*` would make this combination illegal.
+    credentials: 'include',
+  })
+  // Any response can mint a token (sign-in does, session refresh can). Store it whenever it
+  // shows up rather than only on the paths we expect to produce one.
+  const fresh = r.headers.get('set-auth-token')
+  if (fresh) setAuthToken(fresh)
   const data = await r.json().catch(() => ({}))
-  if (!r.ok) { const e = new Error(data.error || ('HTTP ' + r.status)); e.status = r.status; throw e }
+  if (!r.ok) {
+    // Better Auth reports failures as { message }, this server's own routes as { error }.
+    const e = new Error(data.error || data.message || ('HTTP ' + r.status))
+    e.status = r.status
+    throw e
+  }
   return data
 }
 
@@ -45,15 +78,29 @@ function credToJSON(cred) {
   }
   return out
 }
+// Both ceremonies are two calls: ask the server for options, let the authenticator sign
+// them, hand the result back. Better Auth generates the options on GET and verifies on POST,
+// and holds the challenge itself — there is no `cid` to carry between the two any more.
 export async function passkeyRegister(name, code) {
-  const { cid, options } = await api('/api/register/options', { method: 'POST', body: JSON.stringify({ name, code: code || '' }) })
+  const q = new URLSearchParams({ name })
+  if (code) q.set('code', code)
+  const options = await api('/api/auth/passkey/generate-register-options?' + q)
   const cred = await navigator.credentials.create({ publicKey: toCreationOptions(options) })
-  const res = await api('/api/register/verify', { method: 'POST', body: JSON.stringify({ cid, credential: credToJSON(cred) }) })
-  return res.user
+  // createSession: registering IS signing up here, so the ceremony that creates the passkey
+  // is also the one that signs you in. Without it you would be registered and logged out.
+  const res = await api('/api/auth/passkey/verify-registration', {
+    method: 'POST',
+    body: JSON.stringify({ response: credToJSON(cred), name, createSession: true }),
+  })
+  return res.user || (await api('/api/me')).user
 }
+
 export async function passkeyLogin() {
-  const { cid, options } = await api('/api/login/options', { method: 'POST', body: '{}' })
+  const options = await api('/api/auth/passkey/generate-authenticate-options')
   const cred = await navigator.credentials.get({ publicKey: toRequestOptions(options) })
-  const res = await api('/api/login/verify', { method: 'POST', body: JSON.stringify({ cid, credential: credToJSON(cred) }) })
-  return res.user
+  const res = await api('/api/auth/passkey/verify-authentication', {
+    method: 'POST',
+    body: JSON.stringify({ response: credToJSON(cred) }),
+  })
+  return res.user || (await api('/api/me')).user
 }
