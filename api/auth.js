@@ -128,6 +128,11 @@ if (appleKey && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process
 /** Which social buttons the client should draw. Read by /api/config. */
 export const socialEnabled = () => Object.keys(socialProviders)
 
+// The native Google SDK has to be initialised with the iOS OAuth client, which is a different
+// client id from the web one. It is not a secret (it ships inside every copy of the app), and
+// serving it here keeps the app from hard-coding a value that belongs to the deployment.
+export const googleIosClientId = () => process.env.GOOGLE_CLIENT_ID_IOS || null
+
 // Exported so the admin views can read the user table directly. Better Auth owns writes to
 // identity; these are read-mostly views the app already had.
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL })

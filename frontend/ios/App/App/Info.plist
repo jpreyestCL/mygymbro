@@ -2,6 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Google's native sign-in hands control to Safari and comes back through this scheme, which
+	     is the iOS OAuth client id with its dot-separated parts reversed. Google requires exactly
+	     this string: anything else and the sheet opens, the person signs in, and the app never
+	     hears back. Not a secret — it ships in every copy of the app. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.664732705603-ohrfu2r78l92pkft56sgln52tio5oehc</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
