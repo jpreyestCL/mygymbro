@@ -3,9 +3,15 @@
 <plist version="1.0">
 <dict>
 	<!-- Google's native sign-in hands control to Safari and comes back through this scheme, which
-	     is the iOS OAuth client id with its dot-separated parts reversed. Google requires exactly
-	     this string: anything else and the sheet opens, the person signs in, and the app never
-	     hears back. Not a secret — it ships in every copy of the app. -->
+	     is the iOS OAuth client id with its dot-separated parts reversed. Not a secret: it ships
+	     in every copy of the app.
+
+	     This MUST stay in step with GOOGLE_CLIENT_ID_IOS on the server. A URL scheme is baked into
+	     the bundle at build time and cannot be served from /api/config like the id itself, so the
+	     two are the one pair in this app that has to be changed together. Point the server at a
+	     different iOS client without rebuilding and Google's SDK raises "missing support for the
+	     following URL schemes" — an uncaught ObjC exception, so the app dies on the tap rather
+	     than showing an error. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

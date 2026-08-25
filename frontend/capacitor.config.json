@@ -8,5 +8,15 @@
   },
   "server": {
     "androidScheme": "https"
+  },
+  "plugins": {
+    "SocialLogin": {
+      "providers": {
+        "apple": true,
+        "google": true,
+        "facebook": false,
+        "twitter": false
+      }
+    }
   }
 }

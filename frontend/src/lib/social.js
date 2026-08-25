@@ -16,8 +16,35 @@
 import { api, API_BASE } from './api.js'
 import { MOBILE } from './mobile.js'
 
-/** Providers this build can offer, given what the server says it has configured. */
-export const socialProviders = config => (config?.social || []).filter(p => p === 'apple' || p === 'google')
+/**
+ * Providers this build can actually complete — not merely the ones the server has credentials
+ * for. The distinction matters because the native SDKs do not fail politely: tapping a provider
+ * the shell was never configured for raises an uncaught ObjC exception and takes the app down
+ * with it, so a button that cannot work must not be drawn in the first place.
+ */
+export const socialProviders = config => {
+  const list = (config?.social || []).filter(p => p === 'apple' || p === 'google')
+  if (!MOBILE) return list                      // the web flow is a redirect; nothing to configure
+  return list.filter(p => nativeReady(p, config))
+}
+
+// What each native platform needs before its sheet can open. Apple is free on iOS (the OS
+// identifies the app by its bundle id) and needs a web redirect on Android, which nothing here
+// configures yet — so Android offers neither, rather than offering both and crashing.
+function nativeReady(provider, config) {
+  if (platform() !== 'ios') return false
+  // Google's iOS SDK throws "No active configuration" without its own client id, and
+  // "missing support for the following URL schemes" if Info.plist does not carry the reversed
+  // form of that id. Both are hard crashes, so treat a missing id as "cannot offer".
+  if (provider === 'google') return !!config?.googleIosClientId
+  return true
+}
+
+// Read through Capacitor rather than the user agent: the WebView reports a Safari UA on iOS and
+// a Chrome one on Android, neither of which says which shell is hosting it.
+function platform() {
+  try { return globalThis.Capacitor?.getPlatform?.() || 'web' } catch { return 'web' }
+}
 
 // Loaded only in the native build, and only when someone actually taps a button. A static import
 // would pull the plugin into the web bundle, where it is dead weight that cannot work anyway.
@@ -28,13 +55,15 @@ let initialised = false
 async function initNative(config) {
   if (initialised) return
   const SocialLogin = await plugin()
+  // Only ever reached on iOS with a google client id in hand — socialProviders() refuses to draw
+  // a button otherwise, and initialising a provider the shell cannot serve is what crashes.
   await SocialLogin.initialize({
     // Apple needs no client id natively: the OS identifies the app by its bundle id, which is
     // what the server validates through appBundleIdentifier.
     apple: {},
     // Google native, by contrast, does want the iOS OAuth client. The server accepts both this
     // and the web client id, because the same person may arrive by either route.
-    ...(config?.googleIosClientId ? { google: { iOSClientId: config.googleIosClientId } } : {}),
+    google: { iOSClientId: config.googleIosClientId },
   })
   initialised = true
 }

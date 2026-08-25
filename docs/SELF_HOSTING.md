@@ -101,6 +101,37 @@ ALLOW_GUEST=0              # hide "Continue without account" on the login screen
 Register your own passkey profile first, then find your id — identity lives in Postgres in this
 fork, so `select id, name from "user";` — and put it in `ADMIN_UIDS`.
 
+## Sign in with Apple / Google (optional)
+
+Passkeys are the way in on the web and need no configuration. The native app cannot use them:
+inside the Capacitor WebView `navigator.credentials` signs the assertion with the
+`capacitor://localhost` origin rather than the associated domain, so it can never match your
+`RP_ID`. Social sign-in is how the app gets in, and it is off until you set these:
+
+```bash
+GOOGLE_CLIENT_ID=...apps.googleusercontent.com       # "Web" OAuth client
+GOOGLE_CLIENT_SECRET=GOCSPX-...
+GOOGLE_CLIENT_ID_IOS=...apps.googleusercontent.com   # "iOS" OAuth client — only for the app
+APPLE_SERVICES_ID=your.services.id                   # Apple's web flow identifies the app by this
+APPLE_BUNDLE_ID=your.bundle.id                       # the native flow uses the bundle id instead
+APPLE_TEAM_ID=XXXXXXXXXX
+APPLE_KEY_ID=XXXXXXXXXX
+APPLE_KEY_PATH=/path/to/AuthKey_XXXXXXXXXX.p8        # or APPLE_PRIVATE_KEY with the contents
+```
+
+Redirect URIs are `https://<your host>/api/auth/callback/google` and `.../apple`. Each provider
+appears only when its whole set is present, so a partial configuration shows no button rather
+than a broken one, and `/api/config` tells the client which to draw.
+
+Apple issues no static client secret: the server signs a short-lived JWT with your `.p8` on every
+boot, so nothing expires silently six months later. Keep the key outside the checkout.
+
+**`GOOGLE_CLIENT_ID_IOS` and the app's `Info.plist` must be changed together.** Google's iOS SDK
+returns through a URL scheme that is that client id with its parts reversed
+(`com.googleusercontent.apps.<id>`), and a URL scheme is baked into the bundle at build time — it
+cannot be served from `/api/config` like the id itself. Change one without rebuilding the other
+and the app terminates when someone taps the button.
+
 `ALLOW_GUEST=0` removes the local-only guest entrance, for an instance where every profile should
 be a real account. It is allowed by default, and the switch is deliberately asymmetric: a client
 that cannot reach `/api/config` keeps showing the entrance, because "the server did not answer"

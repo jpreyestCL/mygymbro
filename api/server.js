@@ -406,8 +406,9 @@ const routes = {
   // Public config the login screen needs before anyone is signed in.
   'GET /api/config': async (req, res) => {
     const coach = coachConfig.publicConfig();
+    const gIos = googleIosClientId();
     json(res, 200, { invite_only: INVITE_ONLY, recovery: mailEnabled(), allow_guest: ALLOW_GUEST, social: socialEnabled(),
-      ...(googleIosClientId() ? { googleIosClientId: googleIosClientId() } : {}), ...(coach ? { coach } : {}) });
+      ...(gIos ? { googleIosClientId: gIos } : {}), ...(coach ? { coach } : {}) });
   },
 
   'GET /api/me': async (req, res) => {
