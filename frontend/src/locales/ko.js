@@ -722,4 +722,6 @@ export default {
   "Rename routine to “{0}”": "루틴 이름을 “{0}”(으)로 변경",
   "Change what’s planned on one day": "특정 요일의 계획 변경",
   "{0} sets · {1} work": "{0} 세트 · {1} 작업",
+  "Continue with Apple": "Apple로 계속하기",
+  "Continue with Google": "Google로 계속하기",
 }

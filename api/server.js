@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import webpush from 'web-push';
 
-import { auth, isAdmin as isAdminUser, TRUSTED_ORIGINS, listUsers, findUser, setBanned, countUsers, setRecoveryEmail } from './auth.js';
+import { auth, isAdmin as isAdminUser, TRUSTED_ORIGINS, listUsers, findUser, setBanned, countUsers, setRecoveryEmail, socialEnabled } from './auth.js';
 import { mailEnabled } from './email.js';
 import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import * as coachConfig from './coach/config.js';
@@ -406,7 +406,7 @@ const routes = {
   // Public config the login screen needs before anyone is signed in.
   'GET /api/config': async (req, res) => {
     const coach = coachConfig.publicConfig();
-    json(res, 200, { invite_only: INVITE_ONLY, recovery: mailEnabled(), allow_guest: ALLOW_GUEST, ...(coach ? { coach } : {}) });
+    json(res, 200, { invite_only: INVITE_ONLY, recovery: mailEnabled(), allow_guest: ALLOW_GUEST, social: socialEnabled(), ...(coach ? { coach } : {}) });
   },
 
   'GET /api/me': async (req, res) => {

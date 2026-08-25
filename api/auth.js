@@ -62,6 +62,72 @@ const TRUSTED = [
   ...(process.env.EXTRA_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean),
 ]
 
+/* ---------- social sign-in ---------- */
+//
+// Passkeys are the front door on the web and stay that way. They cannot be the front door in
+// the native app: inside Capacitor the page is capacitor://localhost, and `navigator.credentials`
+// signs the assertion with *that* origin, not with the domain in the Associated Domains
+// entitlement — the entitlement only governs the native ASAuthorization API, which a WebView
+// does not use. So an assertion made in the app can never satisfy an rpID of mygym.rlz.cl.
+// Rather than widen the accepted origins (every Capacitor app on earth presents
+// capacitor://localhost, so that trades away the phishing resistance passkeys exist for),
+// the app signs in with Apple or Google, and the web keeps passkeys as well.
+//
+// Both are optional: with no credentials configured the providers simply do not appear, and
+// /api/config tells the client which buttons to draw. That keeps a self-hosted instance
+// working out of the box without anyone registering an OAuth app.
+
+// Apple does not issue a client secret. It wants a short-lived ES256 JWT signed with a private
+// key from the developer account, valid for at most 6 months — so it is generated here rather
+// than pasted into the environment, where it would silently expire half a year later.
+function appleClientSecret({ teamId, keyId, key, servicesId }) {
+  const b64url = b => Buffer.from(b).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  const now = Math.floor(Date.now() / 1000)
+  const header = { alg: 'ES256', kid: keyId }
+  // Just under Apple's 6-month ceiling. A process living longer than that would need a restart;
+  // deploys are far more frequent than that, and a wrong `exp` is rejected outright.
+  const payload = { iss: teamId, iat: now, exp: now + 150 * 24 * 3600, aud: 'https://appleid.apple.com', sub: servicesId }
+  const input = b64url(JSON.stringify(header)) + '.' + b64url(JSON.stringify(payload))
+  // ieee-p1363 is raw r||s, the encoding JWS defines for ES256. Node's default DER is a valid
+  // ECDSA signature that Apple rejects with an opaque invalid_client.
+  const sig = crypto.sign('sha256', Buffer.from(input), { key, dsaEncoding: 'ieee-p1363' })
+  return input + '.' + b64url(sig)
+}
+
+const socialProviders = {}
+
+// clientId is a LIST on purpose. The web flow gets an id token addressed to the browser client,
+// the native SDK one addressed to the iOS client; both are this same app, and a single string
+// would reject whichever half it was not.
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  socialProviders.google = {
+    clientId: [process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_ID_IOS].filter(Boolean),
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  }
+}
+
+// Apple's web flow identifies the app by a Services ID, the native one by the bundle id, and the
+// id token's audience differs accordingly — appBundleIdentifier is what lets the same provider
+// accept both.
+const appleKey = process.env.APPLE_PRIVATE_KEY
+  ? process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+  : process.env.APPLE_KEY_PATH ? fs.readFileSync(process.env.APPLE_KEY_PATH, 'utf8') : null
+if (appleKey && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_SERVICES_ID) {
+  socialProviders.apple = {
+    clientId: [process.env.APPLE_SERVICES_ID, process.env.APPLE_BUNDLE_ID].filter(Boolean),
+    clientSecret: appleClientSecret({
+      teamId: process.env.APPLE_TEAM_ID,
+      keyId: process.env.APPLE_KEY_ID,
+      key: appleKey,
+      servicesId: process.env.APPLE_SERVICES_ID,
+    }),
+    ...(process.env.APPLE_BUNDLE_ID ? { appBundleIdentifier: process.env.APPLE_BUNDLE_ID } : {}),
+  }
+}
+
+/** Which social buttons the client should draw. Read by /api/config. */
+export const socialEnabled = () => Object.keys(socialProviders)
+
 // Exported so the admin views can read the user table directly. Better Auth owns writes to
 // identity; these are read-mostly views the app already had.
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL })
@@ -75,6 +141,17 @@ export const auth = betterAuth({
   // Email/password is deliberately off: the whole point of this app's sign-in is that there
   // is no password to phish or reuse. Email exists only as a recovery channel, added later.
   emailAndPassword: { enabled: false },
+  socialProviders,
+  account: {
+    accountLinking: {
+      // Someone who signed up with a passkey and later taps "Sign in with Apple" on their phone
+      // is the same person and must land in the same profile — a second account would strand
+      // their training history behind a login they no longer use. Apple and Google both verify
+      // the address before asserting it, which is what makes linking on email safe here.
+      enabled: true,
+      trustedProviders: ['apple', 'google'],
+    },
+  },
   emailVerification: {
     sendOnSignUp: false,
     sendVerificationEmail: async ({ user, url }) => {

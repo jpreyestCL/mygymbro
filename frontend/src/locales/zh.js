@@ -722,4 +722,6 @@ export default {
   "Rename routine to “{0}”": "将训练日重命名为「{0}」",
   "Change what’s planned on one day": "更改某一天的安排",
   "{0} sets · {1} work": "{0} 组 · {1} 工作",
+  "Continue with Apple": "通过 Apple 继续",
+  "Continue with Google": "通过 Google 继续",
 }

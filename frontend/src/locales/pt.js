@@ -722,4 +722,6 @@ export default {
   "Rename routine to “{0}”": "Mudar o nome da rotina para «{0}»",
   "Change what’s planned on one day": "Mudar o que está planeado num dia",
   "{0} sets · {1} work": "{0} séries · {1} trabalho",
+  "Continue with Apple": "Continuar com a Apple",
+  "Continue with Google": "Continuar com o Google",
 }

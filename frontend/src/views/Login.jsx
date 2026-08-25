@@ -4,7 +4,9 @@ import { webauthnOK, passkeyLogin, passkeyRegister, BIO } from '../lib/api.js'
 import { hasData } from '../store/useStore.js'
 import { t } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
+import { MOBILE } from '../lib/mobile.js'
 import { guestAllowed } from '../lib/guest.js'
+import { socialLogin, socialProviders } from '../lib/social.js'
 import { useState, useRef, useEffect } from 'react'
 import Icon from '../components/Icon.jsx'
 import { Button } from '../components/ui.jsx'
@@ -49,10 +51,38 @@ export default function Login() {
   // has not arrived yet (offline, restarting) still shows the entrance — see lib/guest.js.
   useEffect(() => { loadConfig() }, [loadConfig])
   const canGuest = guestAllowed(config)
-  const signIn = async () => {
-    try { const u = await passkeyLogin(); setUser(u); await pullState(); useUI.getState().toast(t('Welcome back, {0}', u.name)) }
-    catch (e) { if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') useUI.getState().toast(e.message || t('Sign-in failed')) }
+  const providers = socialProviders(config)
+  // Passkeys are a web affordance here. In the native shell the WebView signs an assertion with
+  // the capacitor://localhost origin, which no rpID of ours can ever match — see lib/social.js.
+  const canPasskey = !MOBILE && webauthnOK()
+
+  // Both entrances land in the same place: adopt the user, pull their profile down, greet them.
+  const enter = async (run, failMsg) => {
+    try {
+      const u = await run()
+      setUser(u); await pullState()
+      useUI.getState().toast(t('Welcome back, {0}', u.name))
+    } catch (e) {
+      // Dismissing the OS sheet is a choice, not a failure — saying "sign-in failed" after
+      // someone deliberately taps Cancel reads as a bug in the app.
+      if (e.name === 'NotAllowedError' || e.name === 'AbortError') return
+      if (/cancel/i.test(e.message || '')) return
+      useUI.getState().toast(e.message || failMsg)
+    }
   }
+  const signIn = () => enter(passkeyLogin, t('Sign-in failed'))
+  const social = provider => enter(() => socialLogin(provider, config), t('Sign-in failed'))
+
+  const socialButtons = providers.length ? <>
+    {providers.includes('apple') && <>
+      <Button variant="primary" icon="apple" onClick={() => social('apple')}>{t('Continue with Apple')}</Button>
+      <div style={{ height: 10 }} />
+    </>}
+    {providers.includes('google') && <>
+      <Button icon="google" onClick={() => social('google')}>{t('Continue with Google')}</Button>
+      <div style={{ height: 10 }} />
+    </>}
+  </> : null
   const head = <>
     <div style={{ fontSize: 54, display: 'flex', justifyContent: 'center', color: 'var(--acc)' }}><Icon name="dumbbell" /></div>
     <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-.028em', margin: '10px 0 4px' }}>MyGymBro</h1>
@@ -78,16 +108,22 @@ export default function Login() {
     <div className="narrow" style={wrap}>
       {head}
       <div className="muted" style={{ marginBottom: 34 }}>{t('Your workouts. Your weights. Your profile.')}</div>
-      {webauthnOK() ? <>
-        <Button variant="primary" icon="person" onClick={signIn}>{t('Sign in with passkey')}</Button>
+      {socialButtons}
+      {canPasskey ? <>
+        {/* Once Apple/Google are on screen the passkey is one way in among several, so it drops
+            to a secondary button rather than competing with them for the primary slot. */}
+        <Button variant={providers.length ? 'plain' : 'primary'} icon="person" onClick={signIn}>{t('Sign in with passkey')}</Button>
         <div style={{ height: 10 }} />
         <Button icon="sparkles" onClick={() => useUI.getState().openSheet(close => <RegisterSheet close={close} />)}>{t('Create new profile')}</Button>
         <div style={{ height: 10 }} />
-      </> : <div className="card small muted" style={{ textAlign: 'left' }}>{canGuest
+      </> : !providers.length && <div className="card small muted" style={{ textAlign: 'left' }}>{canGuest
         ? t("This browser doesn't support passkeys — you can still use openGym locally on this device.")
         : t("This browser doesn't support passkeys, and this instance requires an account. Try a browser or device with passkey support.")}</div>}
       {canGuest && <Button variant="ghost" className="dim" onClick={() => setGuest(true)}>{t('Continue without account')}</Button>}
-      <div className="dim small" style={{ marginTop: 26, lineHeight: 1.5 }}>{t('Passkeys use {0} — no passwords.', BIO)}<br />{t('Each profile keeps its own plan, workouts & body weight.')}</div>
+      <div className="dim small" style={{ marginTop: 26, lineHeight: 1.5 }}>
+        {canPasskey && <>{t('Passkeys use {0} — no passwords.', BIO)}<br /></>}
+        {t('Each profile keeps its own plan, workouts & body weight.')}
+      </div>
     </div>
   )
 }

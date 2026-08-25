@@ -722,4 +722,6 @@ export default {
   "Rename routine to “{0}”": "रूटीन का नाम “{0}” करें",
   "Change what’s planned on one day": "किसी एक दिन की योजना बदलें",
   "{0} sets · {1} work": "{0} सेट · {1} काम",
+  "Continue with Apple": "Apple से जारी रखें",
+  "Continue with Google": "Google से जारी रखें",
 }

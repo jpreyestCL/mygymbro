@@ -722,4 +722,6 @@ export default {
   "Rename routine to “{0}”": "Rutini “{0}” olarak yeniden adlandır",
   "Change what’s planned on one day": "Bir günün planını değiştir",
   "{0} sets · {1} work": "{0} set · {1} çalışma",
+  "Continue with Apple": "Apple ile devam et",
+  "Continue with Google": "Google ile devam et",
 }

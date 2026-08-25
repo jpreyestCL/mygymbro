@@ -16,6 +16,15 @@
         <string>webcredentials:mygym.rlz.cl</string>
         <string>applinks:mygym.rlz.cl</string>
     </array>
+    <!-- Sign in with Apple. The app cannot use passkeys as its way in: inside the Capacitor
+         WebView `navigator.credentials` signs with the capacitor://localhost origin rather than
+         the associated domain, so the assertion can never match an rpID of mygym.rlz.cl. The
+         native Apple flow does honour the entitlement, which is why sign-in moved here and
+         passkeys stayed on the web. -->
+    <key>com.apple.developer.applesignin</key>
+    <array>
+        <string>Default</string>
+    </array>
     <key>com.apple.developer.healthkit</key>
     <true/>
     <!-- No clinical records, no background delivery: body mass is all this app reads. Each
