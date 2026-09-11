@@ -22,14 +22,16 @@ export default function Settings() {
   // that would do nothing.
   const [health, setHealth] = useState(false)
   useEffect(() => { healthAvailable().then(setHealth) }, [])
-  // Settings can be the first screen a guest opens, and the sign-in rows below are drawn from
-  // /api/config — without this they would silently not appear on a cold start.
-  useEffect(() => { loadConfig() }, [loadConfig])
   const nav = useNavigate()
   const S = useStore(s => s.S)
   const user = useStore(s => s.user)
   const { update, replaceState, setUser, pullState, pushState, signOut, signOutAll, resetDemo, setGuest, isGuest: isGuestFn, config, loadConfig } = useStore()
   const isGuest = !user && isGuestFn()
+  // Settings can be the first screen a guest opens, and the sign-in rows below are drawn from
+  // /api/config — without this they would silently not appear on a cold start. It has to sit
+  // BELOW the destructuring above: a dependency array referencing a `const` declared later
+  // throws on render and takes the whole screen down with it.
+  useEffect(() => { loadConfig() }, [loadConfig])
   const toast = useUI(s => s.toast)
   const fileRef = useRef(null)
   const importRef = useRef(null)
@@ -96,12 +98,12 @@ export default function Settings() {
     </div>
 
     {/* ---------- account (demo and mobile builds have nothing to sign in to) ---------- */}
-    <Section title={MOBILE ? t('Your data') : DEMO ? t('Demo') : t('Account')}>
-      {MOBILE ? <>
-        <Row icon="lock" iconTint="var(--acc)" title={t('All data stays on this phone')} subtitle={t('No account, no cloud — back it up anytime with Export below.')} />
-        <Row icon="rocket" iconTint="var(--indigo)" title={t('Self-host openGym')} subtitle={t('Passkey sign-in, sync across your devices, your own data.')} accessory="chevron"
-          onClick={() => window.open(REPO, '_blank', 'noopener')} />
-      </> : DEMO ? <>
+    {/* The native app used to be accountless — no backend, everything on the phone — and this
+        section still said so long after that stopped being true. It signs in against the same
+        server as the web now, so it gets the same account section: a profile, a way in, and a way
+        out. Leaving the old copy here is what left a guest with no sign-out and no entrance. */}
+    <Section title={DEMO ? t('Demo') : t('Account')}>
+      {DEMO ? <>
         <Row icon="sparkles" iconTint="var(--acc)" title={t('You’re in the demo')} subtitle={t('Example data, stored only in this browser — change anything you like.')} />
         <Row icon="reset" iconTint="var(--blue)" title={t('Reset demo data')} accessory="chevron"
           onClick={() => confirmSheet({ title: t('Reset demo data?'), message: t('Puts the example plan, workouts and weigh-ins back the way they started.'), confirmText: t('Reset'), onConfirm: () => { resetDemo(); nav('/home'); toast(t('Demo data reset')) } })} />
