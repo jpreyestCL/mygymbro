@@ -48,8 +48,17 @@ function platform() {
 
 // Loaded only in the native build, and only when someone actually taps a button. A static import
 // would pull the plugin into the web bundle, where it is dead weight that cannot work anyway.
+//
+// The plugin is handed back BOXED, and that box is the whole reason this is not a one-liner. A
+// Capacitor plugin is a Proxy that answers every property access with a callable, `then`
+// included — so it quacks like a thenable. Resolving a promise with a thenable makes JavaScript
+// adopt it: it calls `.then(resolve, reject)` and waits. Capacitor reads that as a native method
+// named "then", which no plugin implements, so nothing ever calls back and the promise stays
+// pending forever. That is not a hypothetical: returning the proxy straight out of `.then()` is
+// what made both sign-in buttons do nothing at all, with no sheet and no error to show for it.
+// Wrapping it in a plain object means the promise resolves with something inert instead.
 let pluginPromise = null
-const plugin = () => (pluginPromise ||= import('@capgo/capacitor-social-login').then(m => m.SocialLogin))
+const plugin = () => (pluginPromise ||= import('@capgo/capacitor-social-login').then(m => ({ sl: m.SocialLogin })))
 
 // A tap that neither opens a sheet nor reports anything is the worst outcome to debug: it looks
 // identical from the outside whether the plugin is missing, the sheet failed to present, or the
@@ -79,7 +88,7 @@ function assertNativePlugin() {
 let initialised = false
 async function initNative(config) {
   if (initialised) return
-  const SocialLogin = await withTimeout(plugin(), 'loading the sign-in plugin')
+  const { sl: SocialLogin } = await withTimeout(plugin(), 'loading the sign-in plugin')
   assertNativePlugin()
   // Only ever reached on iOS with a google client id in hand — socialProviders() refuses to draw
   // a button otherwise, and initialising a provider the shell cannot serve is what crashes.
@@ -124,7 +133,7 @@ async function webLogin(provider) {
 
 async function nativeLogin(provider, config) {
   await initNative(config)
-  const SocialLogin = await plugin()
+  const { sl: SocialLogin } = await plugin()
   // Timed for the same reason as the rest: if the OS sheet never presents, this has to surface as
   // a message rather than a button that quietly did nothing. The window is generous — someone may
   // genuinely take a while over an account picker or a password.

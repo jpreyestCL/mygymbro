@@ -83,3 +83,50 @@ describe('socialProviders in the native app', () => {
     expect(socialProviders(CONFIG)).toEqual([])
   })
 })
+
+// The bug that made both sign-in buttons do nothing: a Capacitor plugin is a Proxy that answers
+// every property access with a callable, `then` included, so it looks like a thenable. Resolving
+// a promise with a thenable makes JavaScript adopt it — it calls `.then(resolve, reject)` and
+// waits for a callback Capacitor never makes, because no plugin implements a method called
+// "then". The promise stays pending forever: no sheet, no error, nothing to debug.
+//
+// This is easy to reintroduce (`.then(m => m.SocialLogin)` is the obvious way to write it), and
+// impossible to notice in a browser, where the plugin is an ordinary object. So the rule is
+// pinned here: whatever the loader hands back must not be thenable.
+describe('the plugin loader and the thenable trap', () => {
+  // Stands in for Capacitor's plugin proxy: every property is a method, `then` included.
+  const capacitorLikeProxy = () => new Proxy({}, {
+    get: (_t, prop) => (...args) => new Promise(() => {}),   // a native call that never answers
+    has: () => true,
+  })
+
+  it('models the trap: awaiting the raw proxy hangs', async () => {
+    const proxy = capacitorLikeProxy()
+    expect(typeof proxy.then).toBe('function')
+    const settled = await Promise.race([
+      Promise.resolve(proxy).then(() => 'settled'),
+      new Promise(r => setTimeout(() => r('pending'), 50)),
+    ])
+    expect(settled).toBe('pending')
+  })
+
+  // The fix, stated as a property rather than as an implementation: box the proxy so the promise
+  // resolves with something inert.
+  it('a boxed proxy settles', async () => {
+    const boxed = await Promise.race([
+      Promise.resolve({ sl: capacitorLikeProxy() }),
+      new Promise(r => setTimeout(() => r(null), 50)),
+    ])
+    expect(boxed).not.toBeNull()
+    expect(typeof boxed.sl.login).toBe('function')
+  })
+
+  // The guarantee that matters for this module: its loader never returns a bare thenable.
+  it('the loader hands back a non-thenable box', async () => {
+    const src = await import('node:fs').then(fs =>
+      fs.readFileSync(new URL('./social.js', import.meta.url), 'utf8'))
+    // `.then(m => m.SocialLogin)` returns the proxy itself and reintroduces the hang.
+    expect(src).not.toMatch(/\.then\(\s*m\s*=>\s*m\.SocialLogin\s*\)/)
+    expect(src).toMatch(/\.then\(\s*m\s*=>\s*\(\{[^}]*m\.SocialLogin[^}]*\}\)\s*\)/)
+  })
+})
