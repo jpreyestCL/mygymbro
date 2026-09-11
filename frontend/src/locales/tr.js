@@ -724,4 +724,7 @@ export default {
   "{0} sets · {1} work": "{0} set · {1} çalışma",
   "Continue with Apple": "Apple ile devam et",
   "Continue with Google": "Google ile devam et",
+  "Leave guest mode?": "Misafir modundan çıkılsın mı?",
+  "Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.": "Giriş ekranına dönersin. Bu cihazda kayıtlı antrenmanlar burada kalır ve tekrar misafir olarak devam edersen seni bekliyor olur.",
+  "Guest mode — this device’s data is not synced to any profile.": "Misafir modu — bu cihazdaki veriler hiçbir profille eşitlenmiyor.",
 }

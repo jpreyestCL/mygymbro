@@ -724,4 +724,7 @@ export default {
   "{0} sets · {1} work": "{0} séries · {1} trabalho",
   "Continue with Apple": "Continuar com a Apple",
   "Continue with Google": "Continuar com o Google",
+  "Leave guest mode?": "Sair do modo convidado?",
+  "Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.": "Voltas ao ecrã de início de sessão. Os treinos guardados neste dispositivo ficam aqui e estarão à tua espera se voltares a entrar como convidado.",
+  "Guest mode — this device’s data is not synced to any profile.": "Modo convidado — os dados deste dispositivo não sincronizam com nenhum perfil.",
 }

@@ -51,20 +51,46 @@ function platform() {
 let pluginPromise = null
 const plugin = () => (pluginPromise ||= import('@capgo/capacitor-social-login').then(m => m.SocialLogin))
 
+// A tap that neither opens a sheet nor reports anything is the worst outcome to debug: it looks
+// identical from the outside whether the plugin is missing, the sheet failed to present, or the
+// call is simply slow. Nothing below is allowed to end in silence.
+const NATIVE_TIMEOUT_MS = 60_000
+function withTimeout(promise, what) {
+  let timer
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${what} never answered — the sign-in sheet did not open`)), NATIVE_TIMEOUT_MS)
+    }),
+  ])
+}
+
+// Capacitor falls back to a plugin's WEB implementation when the native class is not in the
+// binary, and this plugin's web half signs in through a popup — which a WebView silently refuses
+// to open. That combination is precisely a button that "does nothing", so rule it out explicitly
+// and say so, rather than calling into a fallback that cannot work here.
+function assertNativePlugin() {
+  const cap = globalThis.Capacitor
+  if (cap?.isPluginAvailable && !cap.isPluginAvailable('SocialLogin')) {
+    throw new Error('the SocialLogin native plugin is missing from this build')
+  }
+}
+
 let initialised = false
 async function initNative(config) {
   if (initialised) return
-  const SocialLogin = await plugin()
+  const SocialLogin = await withTimeout(plugin(), 'loading the sign-in plugin')
+  assertNativePlugin()
   // Only ever reached on iOS with a google client id in hand — socialProviders() refuses to draw
   // a button otherwise, and initialising a provider the shell cannot serve is what crashes.
-  await SocialLogin.initialize({
+  await withTimeout(SocialLogin.initialize({
     // Apple needs no client id natively: the OS identifies the app by its bundle id, which is
     // what the server validates through appBundleIdentifier.
     apple: {},
     // Google native, by contrast, does want the iOS OAuth client. The server accepts both this
     // and the web client id, because the same person may arrive by either route.
     google: { iOSClientId: config.googleIosClientId },
-  })
+  }), 'initialising sign-in')
   initialised = true
 }
 
@@ -99,12 +125,15 @@ async function webLogin(provider) {
 async function nativeLogin(provider, config) {
   await initNative(config)
   const SocialLogin = await plugin()
-  const res = await SocialLogin.login({
+  // Timed for the same reason as the rest: if the OS sheet never presents, this has to surface as
+  // a message rather than a button that quietly did nothing. The window is generous — someone may
+  // genuinely take a while over an account picker or a password.
+  const res = await withTimeout(SocialLogin.login({
     provider,
     options: provider === 'apple'
       ? { scopes: ['email', 'name'] }
       : { scopes: ['email', 'profile'] },
-  })
+  }), `the ${provider} sheet`)
   const idToken = res?.result?.idToken?.token || res?.result?.idToken
   if (!idToken) throw new Error('no identity token came back from ' + provider)
 

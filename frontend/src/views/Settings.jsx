@@ -9,6 +9,7 @@ import { pushSupported, enablePush, disablePush, sendTestPush } from '../lib/pus
 import { wakeLockSupported } from '../lib/wakelock.js'
 import { t, LANGS, INSTR_LANGS } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
+import { socialLogin, socialProviders } from '../lib/social.js'
 import { healthAvailable } from '../lib/native.js'
 import { MOBILE, shareExport, syncReminder } from '../lib/mobile.js'
 import { loadStarterPlan, confirmSheet, importFromApp, recoveryEmailSheet, healthSheet } from '../sheets.jsx'
@@ -21,10 +22,14 @@ export default function Settings() {
   // that would do nothing.
   const [health, setHealth] = useState(false)
   useEffect(() => { healthAvailable().then(setHealth) }, [])
+  // Settings can be the first screen a guest opens, and the sign-in rows below are drawn from
+  // /api/config — without this they would silently not appear on a cold start.
+  useEffect(() => { loadConfig() }, [loadConfig])
   const nav = useNavigate()
   const S = useStore(s => s.S)
   const user = useStore(s => s.user)
-  const { update, replaceState, setUser, pullState, pushState, signOut, signOutAll, resetDemo } = useStore()
+  const { update, replaceState, setUser, pullState, pushState, signOut, signOutAll, resetDemo, setGuest, isGuest: isGuestFn, config, loadConfig } = useStore()
+  const isGuest = !user && isGuestFn()
   const toast = useUI(s => s.toast)
   const fileRef = useRef(null)
   const importRef = useRef(null)
@@ -59,6 +64,18 @@ export default function Settings() {
     catch (e) { if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') toast(e.message || t('Sign-in failed')) }
   }
   const registerHere = () => useUI.getState().openSheet(close => <RegisterInline close={close} setUser={setUser} pushState={pushState} pullState={pullState} toast={toast} />)
+  // Signing in from Settings rather than the login screen: a guest who already has workouts on
+  // this device reaches their account from here, which is the only route the native app has.
+  const socialHere = async provider => {
+    try { const u = await socialLogin(provider, config); setUser(u); await pullState(); toast(t('Welcome back, {0}', u.name)) }
+    catch (e) {
+      if (e.name === 'NotAllowedError' || e.name === 'AbortError' || /cancel/i.test(e.message || '')) return
+      toast(e.message || t('Sign-in failed'))
+    }
+  }
+  const socialRows = socialProviders(config).map(p => p === 'apple'
+    ? <Row key="apple" icon="apple" iconTint="var(--grey)" title={t('Continue with Apple')} accessory="chevron" onClick={() => socialHere('apple')} />
+    : <Row key="google" icon="google" title={t('Continue with Google')} accessory="chevron" onClick={() => socialHere('google')} />)
   // Ends the profile's sessions on every device — this one included, so on success it lands in
   // the same place as the plain sign-out above (home, local data cleared). On failure nothing
   // local is touched: still signed in here, and say so rather than leaving a half-signed-out app.
@@ -103,12 +120,27 @@ export default function Settings() {
         {user.admin && <Row icon="wrench" iconTint="var(--indigo)" title={t('Admin dashboard')} accessory="chevron" onClick={() => nav('/admin')} />}
         <Row icon="signOut" iconTint="var(--red)" title={t('Sign out')} danger onClick={() => confirmSheet({ title: t('Sign out?'), message: t('Your data is synced to your profile first, then cleared from this device.'), confirmText: t('Sign out'), danger: true, onConfirm: () => { signOut(); nav('/home') } })} />
         <Row icon="shield" iconTint="var(--red)" title={t('Sign out everywhere')} subtitle={t('Ends this profile’s sessions on all your devices.')} danger onClick={signOutEverywhere} />
-      </> : webauthnOK() ? <>
-        <Row icon="sparkles" iconTint="var(--acc)" title={t('Create passkey profile')} subtitle={t('Keeps your data safe and separate per person.')} accessory="chevron" onClick={registerHere} />
-        <Row icon="person" iconTint="var(--blue)" title={t('Sign in with passkey')} accessory="chevron" onClick={signInHere} />
-      </> : (
-        <Row icon="lock" iconTint="var(--grey)" title={t('Passkeys not supported in this browser.')} />
-      )}
+      </> : <>
+        {/* Nobody is signed in. In the native app that is a dead end without these rows: passkeys
+            cannot work there (the WebView signs with the capacitor:// origin), so the passkey
+            rows below are hidden, and a guest was left with no way back to the login screen —
+            no account to sign out of, and no entrance to reach. */}
+        {socialRows.length > 0 && socialRows}
+        {!MOBILE && (webauthnOK() ? <>
+          <Row icon="sparkles" iconTint="var(--acc)" title={t('Create passkey profile')} subtitle={t('Keeps your data safe and separate per person.')} accessory="chevron" onClick={registerHere} />
+          <Row icon="person" iconTint="var(--blue)" title={t('Sign in with passkey')} accessory="chevron" onClick={signInHere} />
+        </> : <Row icon="lock" iconTint="var(--grey)" title={t('Passkeys not supported in this browser.')} />)}
+        {/* Leaving guest mode is a sign-out in every way that matters to the person doing it, so
+            it is worded and tinted like one — and it warns, because guest data lives only here. */}
+        {isGuest && <Row icon="signOut" iconTint="var(--red)" title={t('Sign out')} danger
+          subtitle={t('Guest mode — this device’s data is not synced to any profile.')}
+          onClick={() => confirmSheet({
+            title: t('Leave guest mode?'),
+            message: t('Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.'),
+            confirmText: t('Sign out'), danger: true,
+            onConfirm: () => { setGuest(false); nav('/home') },
+          })} />}
+      </>}
     </Section>
     {!user && !DEMO && !MOBILE && <p className="sect-f" style={{ marginTop: -18, marginBottom: 22 }}>{t('Guest mode — data lives only in this browser.')}</p>}
 

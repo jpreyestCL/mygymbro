@@ -724,4 +724,7 @@ export default {
   "{0} sets · {1} work": "{0} सेट · {1} काम",
   "Continue with Apple": "Apple से जारी रखें",
   "Continue with Google": "Google से जारी रखें",
+  "Leave guest mode?": "अतिथि मोड छोड़ें?",
+  "Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.": "आप साइन-इन स्क्रीन पर लौट आएंगे। इस डिवाइस पर सहेजे गए वर्कआउट यहीं रहेंगे और दोबारा अतिथि के रूप में जारी रखने पर मिल जाएंगे।",
+  "Guest mode — this device’s data is not synced to any profile.": "अतिथि मोड — इस डिवाइस का डेटा किसी प्रोफ़ाइल से सिंक नहीं होता।",
 }

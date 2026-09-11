@@ -724,4 +724,7 @@ export default {
   "{0} sets · {1} work": "{0} 组 · {1} 工作",
   "Continue with Apple": "通过 Apple 继续",
   "Continue with Google": "通过 Google 继续",
+  "Leave guest mode?": "退出访客模式？",
+  "Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.": "将返回登录界面。此设备上保存的训练会留在本地，若再次以访客身份继续，它们仍在。",
+  "Guest mode — this device’s data is not synced to any profile.": "访客模式 — 此设备的数据不会同步到任何个人资料。",
 }
