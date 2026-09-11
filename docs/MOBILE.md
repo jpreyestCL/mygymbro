@@ -5,12 +5,21 @@ openGym ships in two flavors from the same codebase:
 | | **Self-hosted** (this repo's default) | **Mobile app** (`VITE_MOBILE=1`) |
 |---|---|---|
 | Runs | in any browser, against your own server | natively on iPhone / Android (Capacitor shell) |
-| Accounts | passkey sign-in, one profile per person | none — the phone *is* the account |
-| Data | synced to your server, readable on desktop | stays on the device (file in the app's private storage) |
+| Accounts | passkey, Apple or Google — one profile per person | **Apple or Google** (passkeys cannot work here) |
+| Data | synced to your server, readable on desktop | synced to the same server, mirrored to a file on the device |
 | Reminders | Web Push from your server | native local notifications, no server involved |
 | Exercise media | served by your server (`img/`, `gif/`) | loaded from the jsDelivr CDN |
 
-The mobile flavor never talks to a backend: no sign-in screen, no sync, no telemetry.
+**This table used to say the app had no accounts and never talked to a backend.** That was true of
+upstream's build and stopped being true here once Apple/Google sign-in landed: `build:mobile` sets
+`VITE_API_BASE` to the deployed server, and the app signs in and syncs the same profile as the web.
+The code still supports the accountless flavor — leave `VITE_API_BASE` unset and it falls back to
+the phone — but that is not what this repo ships.
+
+Sign-in in the app is Apple or Google and **cannot** be passkeys: inside the WebView the page
+origin is `capacitor://localhost`, so `navigator.credentials` signs the assertion with that origin
+rather than the domain in the Associated Domains entitlement, and no rpID of yours can match it.
+See CLAUDE.md for why widening the server's accepted origins is the wrong fix.
 State is mirrored from `localStorage` into `opengym-state.json` in the app's private data
 directory on every change (iOS is allowed to evict WebView storage under pressure — the
 file mirror is the durable copy and is restored on launch). Backups go out through the

@@ -41,17 +41,42 @@ Build-time flags select the flavor; Vite replaces them, so the unused paths fold
 
 | Flavor | Flag | Backend | Auth | Storage |
 |---|---|---|---|---|
-| Self-hosted web (default) | — | Node api | passkeys, per-profile sync | `./data/*.json` on the server + localStorage |
+| Self-hosted web (default) | — | Node api, same origin | passkeys + Apple/Google, per-profile sync | `./data/*.json` on the server + localStorage |
 | Demo (GitHub Pages) | `VITE_DEMO=1` | none | guest only | localStorage, seeded by `lib/demoSeed.js` |
-| Mobile (Capacitor) | `VITE_MOBILE=1` | none | guest only | localStorage **plus** a JSON file mirror in the app data dir |
+| Mobile (Capacitor) | `VITE_MOBILE=1` | the deployed api, cross-origin (`VITE_API_BASE`) | **Apple/Google only**, bearer token | localStorage **plus** a JSON file mirror in the app data dir, synced to the server |
 
 `lib/demo.js` and `lib/mobile.js` own these branches; `store/useStore.js` `boot()` is where the
 three paths diverge. Anything imported only by the demo (the seed generator) is dynamically
 imported so it never ships in a self-hosted bundle.
 
-**Passkeys require a single origin.** nginx serves the built app and proxies `/api` to the
-`api` container, so the browser only ever sees one host. Anything that splits app and API onto
-different origins breaks login.
+The mobile row used to read "none / guest only", from when the app really was a standalone
+phone-only build. It has signed in against the same server as the web since Apple/Google landed,
+and the stale description was not harmless: it is why Settings still opened with "All data stays
+on this phone — no account, no cloud", which came *first* in the account section and left every
+account row, sign-out included, in a branch the app could never reach.
+
+**Passkeys are web-only, and not by choice.** nginx serves the built app and proxies `/api` on one
+host, which is what makes the web ceremony work — split app and API onto different origins and
+web login breaks. The native app is exactly that split: the page is `capacitor://localhost`, and
+`navigator.credentials` signs the assertion with *that* origin rather than the domain in the
+Associated Domains entitlement, which governs only the native `ASAuthorization` API a WebView
+never touches. So an assertion made in the app can never satisfy an rpID of `mygym.rlz.cl`:
+
+    Unexpected authentication response origin "capacitor://localhost",
+    expected one of: https://mygym.rlz.cl
+
+Widening the accepted origins would "fix" it and should not be done — every Capacitor app on
+earth presents `capacitor://localhost`, so that trades away the phishing resistance passkeys
+exist for. Sign-in in the app goes through Apple or Google instead (`lib/social.js`), and
+`socialProviders()` draws only the buttons the running platform can actually complete.
+
+**Never resolve a promise with a Capacitor plugin.** A plugin is a Proxy that answers every
+property access with a callable, `then` included, so it looks like a thenable; resolving a promise
+with one makes JavaScript adopt it, call `.then(resolve, reject)`, and wait forever for a native
+method no plugin implements. `import(...).then(m => m.SocialLogin)` is the obvious way to write
+the loader and it hangs — silently, with no sheet and no error. Box it:
+`.then(m => ({ sl: m.SocialLogin }))`. A browser cannot reproduce this, because there the plugin
+is an ordinary object; `social.test.js` pins it instead.
 
 ### State: one object `S`, synced whole
 

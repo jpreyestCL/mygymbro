@@ -80,7 +80,7 @@ as a home-screen app, passkey sign-in, offline support, sync across your phone a
 - 🌍 **12 languages** — full UI translation (EN, DE, ES, FR, IT, PT, PL, TR, RU, ZH, KO, HI); exercise instructions localized in 10 of them, loaded on demand so the app stays fast
 - 📥 **Bring your history with you** — import from **FitNotes** (Android and iOS), **Strong** and **Hevy**, or body weight straight out of an **Apple Health** export. Exercise names are matched against the library and anything unrecognised becomes one of your own exercises, so nothing in the file is dropped
 - 📦 **Yours to keep** — one-tap JSON export/import, guest mode, **no telemetry**
-- 📱 **Standalone Android app** — the whole tracker as a sideloadable APK: no account, no server, data on the phone, native workout reminders ([download](https://opengym.duarte-santos.ch))
+- 📱 **Native mobile app** — the whole tracker on iPhone and Android (Capacitor), signing in with Apple or Google against your own server, with native workout reminders. Upstream also publishes an accountless Android APK ([download](https://opengym.duarte-santos.ch))
 
 ## Quick start (self-host)
 
@@ -102,18 +102,25 @@ a build step locally either way.
 > Want it reachable from your phone over the internet with passkeys? You'll need an HTTPS
 > domain — a two-line change in `.env`. See **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
 
-## Mobile app (no server at all)
+## Mobile app
 
-The same codebase also builds a **standalone mobile app** (Capacitor): no account, no sync,
-no backend — everything stays on the phone, with native workout-day reminders and share-sheet
-backups. Self-hosting gets you multi-device sync and profiles for friends & family; the
-mobile app is the install-and-done flavor.
+The same codebase also builds a **native mobile app** (Capacitor), with native workout-day
+reminders and share-sheet backups. In this fork it is not a standalone, phone-only build: it signs
+in against the same server as the web and syncs the same profile, so your training is the same on
+both. Upstream's accountless flavor is still what the code supports — point `VITE_API_BASE` at
+nothing and it falls back to the phone — but `npm run build:mobile` here targets the deployed API.
 
-- **Android:** [**download the APK**](https://opengym.duarte-santos.ch) and sideload it —
-  openGym is deliberately not on the Play Store. Or build it yourself: **[docs/MOBILE.md](docs/MOBILE.md)**.
-- **iPhone:** Apple doesn't allow installing apps outside the App Store, so there is no iOS
-  download. Self-host and add it to your home screen from Safari (it's a full PWA), or build
-  the native app onto your own device from Xcode — see **[docs/MOBILE.md](docs/MOBILE.md)**.
+**Sign-in in the app is Apple or Google, not passkeys**, and that is a constraint rather than a
+preference: inside the WebView the page origin is `capacitor://localhost`, so a passkey assertion
+can never match the server's domain. See CLAUDE.md for why widening the accepted origins is the
+wrong fix.
+
+- **iPhone:** distributed through TestFlight. Build and ship one with
+  `node scripts/ios-build.mjs`, which starts an Xcode Cloud build from the terminal — no unlocked
+  Mac required. See **[docs/MOBILE.md](docs/MOBILE.md)**.
+- **Android:** build it yourself — **[docs/MOBILE.md](docs/MOBILE.md)**. The social sign-in
+  plugin is not configured for Android yet, so the app offers no way in there; that is why
+  `socialProviders()` draws no buttons on it rather than buttons that fail.
 
 ## How it works
 
