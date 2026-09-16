@@ -25,4 +25,13 @@ end
 
 post_install do |installer|
   assertDeploymentTarget(installer)
+  # Capacitor's helper only raises targets to 14.0, and the plugin podspecs declare 14.0, but
+  # Xcode 27 (what Xcode Cloud's "Latest Release" now resolves to) refuses anything below 15.0
+  # as a hard error. Pin every pod to the app's own target so a runner upgrade can't fail the
+  # archive again.
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+    end
+  end
 end
