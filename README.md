@@ -177,6 +177,8 @@ Rough, community-driven — ideas and PRs welcome:
 - [ ] Body measurements (waist, arms…) alongside weight
 - [ ] Per-exercise notes & plate calculator
 - [ ] Exercise instructions in German & Portuguese (UI is translated; upstream dataset doesn't ship these yet)
+- [ ] Exercise picker: exercises you have already done (in a routine or a logged workout) always come first, then the ones you have never used — under every body-part/equipment filter and every search, not only the "Chosen" tab
+- [ ] Exercise search matches every word of the query in any order ("row cable" finds "Cable Row"), instead of the query as one contiguous string
 
 ## Tech
 
