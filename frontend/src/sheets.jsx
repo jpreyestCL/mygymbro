@@ -338,7 +338,7 @@ function ExerciseHistory({ exId, close }) {
     if (!entry) continue
     const done = entry.sets.filter(x => x.done)
     if (!done.length) continue
-    sessions.push({ d: w.d, name: w.name, sets: done, target: entry.target, est: bestSetOf(entry, undefined, st) })
+    sessions.push({ d: w.d, name: w.name, sets: done, target: entry.target, est: bestSetOf(entry, undefined, st), note: entry.note })
   }
   const best = best1RM(st, exId)
   return <>
@@ -361,6 +361,7 @@ function ExerciseHistory({ exId, close }) {
             <div className="ss nocap" style={{ width: '100%' }}>
               {s.sets.map(x => setLabelIn(st, exId, x, s.target, unit)).join(' · ')}
             </div>
+            {s.note && <div className="ss nocap exnote-line" style={{ width: '100%' }}><Icon name="pencil" />{s.note}</div>}
           </div>)}
         </div>
       </>}
@@ -928,7 +929,8 @@ function WorkoutDetail({ w, close }) {
       return <div key={i} className="row" style={{ marginBottom: 12, alignItems: 'flex-start' }}>
         {ex && <Thumb ex={ex} />}
         <div className="grow"><div className="tt capitalize" style={{ fontWeight: 600 }}>{ex ? ex.n : (e.n || e.id)} {w.prs && w.prs.includes(e.id) && <span className="pr"><Icon name="trophy" />PR</span>}</div>
-          <div className="ss">{e.sets.filter(s => s.done).map(s => setLabel(e.id, s, e.target)).join('  ·  ') || t('no sets')}</div></div>
+          <div className="ss">{e.sets.filter(s => s.done).map(s => setLabel(e.id, s, e.target)).join('  ·  ') || t('no sets')}</div>
+          {e.note && <div className="ss exnote-line"><Icon name="pencil" />{e.note}</div>}</div>
       </div>
     })}
     <Button variant="danger" onClick={() => confirmSheet({ title: t('Delete workout?'), message: t('This removes it from your history for good.'), confirmText: t('Delete'), danger: true, onConfirm: () => { update(s => { s.workouts = s.workouts.filter(x => x.id !== w.id) }); close(); toast(t('Workout deleted')) } })}>{t('Delete workout')}</Button>
@@ -1064,6 +1066,33 @@ function TopWeight({ entryIdx, close }) {
   </>
 }
 export const topWeightSheet = entryIdx => ui().openSheet(close => <TopWeight entryIdx={entryIdx} close={close} />)
+
+// A note on one exercise of the session in progress — seat position, grip, how it felt.
+// It is saved with the entry when the workout finishes and read back from the exercise's
+// history, so the thing you wanted to remember is there the next time you load the bar.
+function NoteSheet({ entryIdx, close }) {
+  const st = useStore(s => s.S)
+  const entry = st.active ? st.active.entries[entryIdx] : null
+  const [v, setV] = useState(entry?.note || '')
+  // Same defensive shape as TopWeight: the workout can end underneath an open sheet.
+  useEffect(() => { if (!entry) close() }, [!entry])
+  if (!entry) return null
+  const save = () => {
+    const n = v.trim()
+    // An emptied note drops the key rather than storing "", so the entry carries only what
+    // was actually written — in the session, in history and in a backup.
+    update(s => { const e = s.active?.entries[entryIdx]; if (!e) return; if (n) e.note = n; else delete e.note })
+    close()
+  }
+  return <>
+    <h3 className="capitalize row" style={{ gap: 8 }}><Icon name="pencil" style={{ color: 'var(--acc)' }} />{exOr(entry.id).n}</h3>
+    <textarea className="input" rows={4} maxLength={1000} autoFocus placeholder={t('Anything to remember next time — seat position, grip, how it felt.')}
+      value={v} onChange={e => setV(e.target.value)} />
+    <div style={{ height: 14 }} />
+    <Button variant="primary" onClick={save}>{t('Save note')}</Button>
+  </>
+}
+export const noteSheet = entryIdx => ui().openSheet(close => <NoteSheet entryIdx={entryIdx} close={close} />)
 
 // Shown when the last exercise's last set is checked — finish, or keep going.
 function WorkoutComplete({ close }) {

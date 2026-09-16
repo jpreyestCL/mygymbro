@@ -8,6 +8,9 @@ export function buildCompletedWorkout(active, { end = Date.now(), prs = [], snap
       topW: entry.topW || null,
       target: entry.target || null,
     }
+    // A note is written only when there is one, so every record without a note keeps the
+    // exact shape it had before notes existed — nothing to migrate, nothing to read as "".
+    if (typeof entry.note === 'string' && entry.note.trim()) completed.note = entry.note.trim()
     const snapshot = typeof snapshotFor === 'function' ? snapshotFor(entry) : null
     if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) && Object.keys(snapshot).length) {
       completed.muscleSnapshot = { ...snapshot }

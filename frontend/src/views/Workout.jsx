@@ -12,7 +12,7 @@ import { api } from '../lib/api.js'
 import { setProgressHighWater, supersetFlowStep } from '../lib/supersetFlow.js'
 import { isWarmupRow } from '../lib/workout-model.js'
 import Media from '../components/Media.jsx'
-import { startFlow, exercisePicker, exConfigSheet, exerciseDetailSheet, exerciseHistorySheet, topWeightSheet, finishWorkout, workoutCompleteSheet, confirmSheet } from '../sheets.jsx'
+import { startFlow, exercisePicker, exConfigSheet, exerciseDetailSheet, exerciseHistorySheet, noteSheet, topWeightSheet, finishWorkout, workoutCompleteSheet, confirmSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Button, Check, NumberField, Segmented } from '../components/ui.jsx'
 import { nextPrescription, applyPrescription } from '../lib/progression.js'
@@ -144,8 +144,15 @@ function ExerciseBlock({ entryIdx, compact, onToggle, onField, onAddSet, onRemov
       <button className="tag btn-tag" onClick={() => exerciseHistorySheet(entry.id)}>
         <Icon name="chart" />{t('History')}
       </button>
+      <button className="tag btn-tag" onClick={() => noteSheet(entryIdx)}>
+        <Icon name="pencil" />{t('Note')}
+      </button>
     </div>
     {last && <div className="small dim" style={{ marginBottom: 4 }}>{t('Last time')} ({fmtDate(last.d)}): {last.sets.map(s => setLabelIn(S, entry.id, s, last.target, exUnit)).join(', ')}</div>}
+    {/* Last session's note is the reason notes exist ("seat 4"), so it is in view before the
+        first set, not behind the History button. Hidden once today's note says the same. */}
+    {last?.note && last.note !== entry.note && <div className="small dim exnote-line" style={{ marginBottom: 4 }}><Icon name="pencil" />{t('Last note')} ({fmtDate(last.d)}): {last.note}</div>}
+    {entry.note && <div className="small exnote-line" style={{ marginBottom: 4 }}><Icon name="pencil" style={{ color: 'var(--acc)' }} />{entry.note}</div>}
     {plan && plan.why && plan.kind !== 'off' && <div className={'progline' + (plan.kind === 'deload' ? ' warn' : '')}>
       <Icon name={plan.kind === 'up' ? 'arrowUp' : plan.kind === 'deload' ? 'arrowDown' : 'lightbulb'} />
       <span>{t(...plan.why)}</span>

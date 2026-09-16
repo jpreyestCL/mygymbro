@@ -433,6 +433,9 @@ h4.sec{
   background:var(--surface);border-radius:var(--r);padding:13px 15px;
   line-height:1.45;white-space:pre-wrap;font-size:15px;margin-bottom:10px;color:var(--label-2);
 }
+/* a per-session note, inline under a line of sets: keeps the author's line breaks */
+.exnote-line{display:flex;align-items:flex-start;gap:5px;white-space:pre-wrap;line-height:1.38}
+.exnote-line svg{flex:none;font-size:13px;margin-top:2px}
 
 /* --- search field --- */
 .searchf{position:relative;display:flex;align-items:center}
