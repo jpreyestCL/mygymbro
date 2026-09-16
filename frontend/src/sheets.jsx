@@ -21,7 +21,7 @@ import { parseImport, mergeImport } from './lib/import-csv.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-share.js'
 import { estimate1RM, best1RM, bestSetOf, is1RMRecord, REP_CAP } from './lib/onerm.js'
 import { unitForEx, convert, baseUnit } from './lib/units.js'
-import { topWeightProposal, confirmedBase, sessionMax, topWBase } from './lib/top-weight.js'
+import { topWeightProposal, confirmedBase, sessionMax, nextDefault } from './lib/top-weight.js'
 import { queryWords, matchesQuery, rankByUsage } from './lib/exercise-search.js'
 import { healthWriteWeight, healthReadWeights, healthAuthorize, healthAvailable } from './lib/native.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS } from './lib/progression.js'
@@ -1043,9 +1043,10 @@ function TopWeight({ entryIdx, close }) {
       // topW is kept in the unit of the sets beside it — that is how bestWeightForEntry
       // reads it back. exWeights is a profile-unit number, which is how buildSets seeds
       // from it, so the same confirmation is stored twice in two units on purpose.
+      // Set, not raised: this is the weight you asked to open on next time. A ratchet here
+      // meant one mistyped confirmation could never be walked back.
       s.active.entries[entryIdx].topW = n
-      const cur = s.exWeights[entry.id]
-      s.exWeights[entry.id] = { w: Math.max(confirmedBase(s, entry, n), cur ? cur.w : 0), d: todayISO() }
+      s.exWeights[entry.id] = { w: confirmedBase(s, entry, n), d: todayISO() }
     })
     close()
     if (advance && unitDone) {
@@ -1055,7 +1056,7 @@ function TopWeight({ entryIdx, close }) {
   }
   return <>
     <h3 className="capitalize row" style={{ gap: 8 }}><Icon name="checkCircle" style={{ color: 'var(--acc)' }} />{t('{0} done', ex.n)}</h3>
-    <div className="muted small">{t('Confirm the weight you worked with — your highest becomes the default next time.')}{!unitDone && unit.length > 1 ? ' ' + t('Then finish the superset partner.') : ''}</div>
+    <div className="muted small">{t('Confirm the weight you worked with — it becomes the default next time.')}{!unitDone && unit.length > 1 ? ' ' + t('Then finish the superset partner.') : ''}</div>
     <WeightInput value={v} setValue={setV} unit={wu} />
     <div style={{ height: 10 }} />
     {prevBest > 0 ? <div className="small dim" style={{ textAlign: 'center', marginBottom: 12 }}>{t('Previous best:')} {fmtNum(prevBest)} {wu}{record && <span style={{ color: 'var(--yellow)' }}> — {t('new record!')}</span>}</div> : <div style={{ height: 4 }} />}
@@ -1161,9 +1162,11 @@ function doFinishWorkout() {
   update(s => {
     w.entries.forEach(e => {
       // exWeights is a profile-unit number (buildSets seeds from it as one); an lb entry
-      // used to land here unconverted and next session opened on 135 "kg".
-      const mx = Math.max(sessionMax(s, e), topWBase(s, e))
-      if (mx > 0) { const cur = s.exWeights[e.id]; if (!cur || mx > cur.w) s.exWeights[e.id] = { w: mx, d: w.d } }
+      // used to land here unconverted and next session opened on 135 "kg". A confirmed
+      // weight sets it, an unconfirmed session only raises it — see nextDefault.
+      const cur = s.exWeights[e.id]
+      const next = nextDefault(s, e, cur?.w)
+      if (next > 0 && next !== cur?.w) s.exWeights[e.id] = { w: next, d: w.d }
     })
     s.workouts.push(w)
     s.active = null

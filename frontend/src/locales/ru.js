@@ -113,7 +113,7 @@ export default {
   'Workout deleted': 'Тренировка удалена',
   'Delete workout': 'Удалить тренировку',
   '{0} done': '{0} — готово',
-  'Confirm the weight you worked with — your highest becomes the default next time.': 'Подтверди рабочий вес — наибольший станет значением по умолчанию в следующий раз.',
+  'Confirm the weight you worked with — it becomes the default next time.': 'Подтверди рабочий вес — он станет значением по умолчанию в следующий раз.',
   'Then finish the superset partner.': 'Затем доделай второе упражнение суперсета.',
   'Previous best:': 'Прежний рекорд:',
   'new record!': 'новый рекорд!',

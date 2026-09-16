@@ -113,7 +113,7 @@ export default {
   'Workout deleted': 'वर्कआउट हटाया गया',
   'Delete workout': 'वर्कआउट हटाएँ',
   '{0} done': '{0} पूरा',
-  'Confirm the weight you worked with — your highest becomes the default next time.': 'जिस वज़न से काम किया उसकी पुष्टि करें — सबसे ज़्यादा वज़न अगली बार डिफ़ॉल्ट बन जाएगा।',
+  'Confirm the weight you worked with — it becomes the default next time.': 'जिस वज़न से काम किया उसकी पुष्टि करें — यही अगली बार डिफ़ॉल्ट बन जाएगा।',
   'Then finish the superset partner.': 'फिर सुपरसेट का दूसरा व्यायाम पूरा करें।',
   'Previous best:': 'पिछला सर्वश्रेष्ठ:',
   'new record!': 'नया रिकॉर्ड!',

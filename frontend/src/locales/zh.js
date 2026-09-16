@@ -113,7 +113,7 @@ export default {
   'Workout deleted': '训练已删除',
   'Delete workout': '删除训练',
   '{0} done': '{0} 完成',
-  'Confirm the weight you worked with — your highest becomes the default next time.': '确认你使用的重量——最高值将成为下次的默认值。',
+  'Confirm the weight you worked with — it becomes the default next time.': '确认你使用的重量——它将成为下次的默认值。',
   'Then finish the superset partner.': '然后完成超级组的另一个动作。',
   'Previous best:': '之前最佳：',
   'new record!': '新纪录！',

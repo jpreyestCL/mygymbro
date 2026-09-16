@@ -479,8 +479,11 @@ export function bestWeightForEntry(entry = {}, S) {
   const u = (entry.sets || []).find(x => x.u)?.u
   const topWeight = entry.topW == null ? NaN : (S ? wBase(S, { w: entry.topW, u }) : Number(entry.topW))
   // topW predates phase-tagged warm-ups. It remains a fallback for legacy all-work records,
-  // but cannot override resolved work rows once any warm-up marker exists.
+  // but cannot override resolved work rows once any warm-up marker exists — nor once any
+  // work row carries a load. The rows are what was lifted; a topW above them is a slip in
+  // the confirm sheet (its old prefill wrote the all-time record back as today's), and
+  // letting it win made that slip the exercise's best for good.
   if (parentMode === 'reps' && !hasNonRepsWorkRow && !hasWarmupRow
-    && Number.isFinite(topWeight) && topWeight > best) best = topWeight
+    && best === 0 && Number.isFinite(topWeight) && topWeight > 0) best = topWeight
   return best
 }

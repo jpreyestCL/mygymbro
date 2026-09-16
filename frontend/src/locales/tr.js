@@ -113,7 +113,7 @@ export default {
   'Workout deleted': 'Antrenman silindi',
   'Delete workout': 'Antrenmanı sil',
   '{0} done': '{0} tamamlandı',
-  'Confirm the weight you worked with — your highest becomes the default next time.': 'Çalıştığın ağırlığı onayla — en yükseği bir dahaki sefer varsayılan olur.',
+  'Confirm the weight you worked with — it becomes the default next time.': 'Çalıştığın ağırlığı onayla — bir dahaki sefer varsayılan olur.',
   'Then finish the superset partner.': 'Sonra süpersetin diğer egzersizini bitir.',
   'Previous best:': 'Önceki rekor:',
   'new record!': 'yeni rekor!',

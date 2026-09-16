@@ -71,10 +71,11 @@ function ExerciseBlock({ entryIdx, compact, onToggle, onField, onAddSet, onRemov
   const exUnit = unitForEx(S, entry.id)
   const inExUnit = w => wIn(S, { w, u: baseUnit(S) }, exUnit)
   // The same number the "confirm your working weight" sheet calls your best, so the two
-  // never disagree inside one session: heaviest logged set, or the working weight you kept.
+  // never disagree inside one session: the heaviest set ever logged. Not the working weight
+  // you kept in exWeights — that is a default for next time, not something you lifted.
   // bestWeightFor answers in the profile's unit so it can be compared across the app; this
   // screen shows it in the exercise's.
-  const best = cardio ? 0 : Math.max(bestWeightFor(S, entry.id), (S.exWeights[entry.id] || {}).w || 0)
+  const best = cardio ? 0 : bestWeightFor(S, entry.id)
   // What the progression policy decided for this session, and why (issue #17). Computed when
   // the session was built so the reason matches the numbers already in the rows.
   const plan = entry.plan

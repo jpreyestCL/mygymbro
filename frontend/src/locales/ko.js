@@ -113,7 +113,7 @@ export default {
   'Workout deleted': '운동 삭제됨',
   'Delete workout': '운동 삭제',
   '{0} done': '{0} 완료',
-  'Confirm the weight you worked with — your highest becomes the default next time.': '사용한 무게를 확인하세요 — 최고 무게가 다음번 기본값이 됩니다.',
+  'Confirm the weight you worked with — it becomes the default next time.': '사용한 무게를 확인하세요 — 다음번 기본값이 됩니다.',
   'Then finish the superset partner.': '그다음 슈퍼세트 짝 운동을 마무리하세요.',
   'Previous best:': '이전 최고 기록:',
   'new record!': '신기록!',

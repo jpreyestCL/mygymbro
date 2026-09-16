@@ -5,7 +5,10 @@
 // wrote the old record back as this session's `topW`, bestWeightForEntry then read that topW as
 // the entry's best, and the next sheet proposed it again. One slip of the slider became a record
 // nothing could lower. The proposal is what you lifted today; the record stays on the
-// "previous best" line, and the exWeights ratchet keeps it without any help from the prefill.
+// "previous best" line and is read from the logged sets alone.
+//
+// exWeights is not a record, it is the working weight the next session opens on. Confirming
+// sets it — it used to only ever go up, which was the other half of how a slip stuck for good.
 //
 // Everything here speaks the unit the exercise is logged in, because that is what the column
 // above the sheet is headed in. A cable stack labelled in lb must not get a "9.2 kg" sheet.
@@ -34,16 +37,16 @@ export function topWBase(S, entry) {
  * What the sheet opens with, all in the exercise's unit:
  *   value    — the prefill: today's heaviest work set, else the planned weight
  *   maxSet   — today's heaviest work set (0 when nothing loaded was checked off)
- *   prevBest — the record before today: confirmed working weight or heaviest logged set
+ *   prevBest — the heaviest set ever logged for this exercise, before today
  *   record   — today beat it
  */
 export function topWeightProposal(S, entry) {
   const unit = unitForEx(S, entry.id)
   const fromBase = base => convert(base || 0, baseUnit(S), unit)
   const maxSet = sessionMax(S, entry, unit)
-  // Both candidates for the record are in the profile's unit: exWeights is written that way
-  // (buildSets seeds from it as a base number) and bestWeightFor answers that way.
-  const prevBest = fromBase(Math.max((S.exWeights?.[entry.id] || {}).w || 0, bestWeightFor(S, entry.id)))
+  // Not exWeights: that is the next-time default you chose, which may sit above or below
+  // anything you lifted, and calling it a "best" is how an inflated one looked like a record.
+  const prevBest = fromBase(bestWeightFor(S, entry.id))
   // A routine's planned weight is a profile-unit number too (see buildSets).
   const planned = fromBase(entry.target?.weight)
   return { unit, maxSet, prevBest, value: maxSet || planned || 0, record: maxSet > prevBest }
@@ -51,3 +54,16 @@ export function topWeightProposal(S, entry) {
 
 /** The number to keep in exWeights for a weight confirmed in the sheet's unit. */
 export const confirmedBase = (S, entry, value) => convert(value, unitForEx(S, entry.id), baseUnit(S))
+
+/**
+ * What exWeights should hold for `exId` once a session's entry is stored, given what it
+ * holds now (`cur`, a base-unit number or undefined). A confirmed weight sets it: that is the
+ * number you asked to open on next time, higher or lower. Without a confirmation the session
+ * only raises it, as it always did — you did not say anything, so nothing is lowered.
+ */
+export function nextDefault(S, entry, cur) {
+  const confirmed = topWBase(S, entry)
+  if (confirmed > 0) return confirmed
+  const lifted = sessionMax(S, entry)
+  return Math.max(lifted, cur || 0) || 0
+}
