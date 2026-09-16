@@ -179,6 +179,7 @@ Rough, community-driven — ideas and PRs welcome:
 - [ ] Exercise instructions in German & Portuguese (UI is translated; upstream dataset doesn't ship these yet)
 - [x] Exercise picker: exercises you have already done (in a routine or a logged workout) always come first, then the ones you have never used — under every body-part/equipment filter and every search, not only the "Chosen" tab
 - [x] Exercise search matches every word of the query in any order ("row cable" finds "Cable Row"), instead of the query as one contiguous string
+- [ ] Clean up the working-weight ratchet: `exWeights` only ever goes up, so a mistyped confirmation (or a `topW` written back from the old prefill) sticks as the exercise's "previous best" forever. Confirming a weight should set it rather than only raise it, and a stored `topW` that exceeds every real set of its entry should be ignored when reading history
 
 ## Tech
 
