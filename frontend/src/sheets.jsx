@@ -17,11 +17,12 @@ import { glyphOf, GLYPH_GROUPS, DEFAULT_GLYPH } from './lib/glyphs.js'
 import BodyMap from './components/BodyMap.jsx'
 import { loadOfWorkouts, exerciseMuscleSnapshot } from './lib/muscles.js'
 import { buildCompletedWorkout } from './lib/finish-workout.js'
-import { isWarmupRow } from './lib/workout-model.js'
 import { parseImport, mergeImport } from './lib/import-csv.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-share.js'
 import { estimate1RM, best1RM, bestSetOf, is1RMRecord, REP_CAP } from './lib/onerm.js'
 import { unitForEx, convert, baseUnit } from './lib/units.js'
+import { topWeightProposal, confirmedBase, sessionMax, nextDefault } from './lib/top-weight.js'
+import { queryWords, matchesQuery, rankByUsage } from './lib/exercise-search.js'
 import { healthWriteWeight, healthReadWeights, healthAuthorize, healthAvailable } from './lib/native.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS } from './lib/progression.js'
 import { MOBILE, shareExport } from './lib/mobile.js'
@@ -337,7 +338,7 @@ function ExerciseHistory({ exId, close }) {
     if (!entry) continue
     const done = entry.sets.filter(x => x.done)
     if (!done.length) continue
-    sessions.push({ d: w.d, name: w.name, sets: done, target: entry.target, est: bestSetOf(entry, undefined, st) })
+    sessions.push({ d: w.d, name: w.name, sets: done, target: entry.target, est: bestSetOf(entry, undefined, st), note: entry.note })
   }
   const best = best1RM(st, exId)
   return <>
@@ -360,6 +361,7 @@ function ExerciseHistory({ exId, close }) {
             <div className="ss nocap" style={{ width: '100%' }}>
               {s.sets.map(x => setLabelIn(st, exId, x, s.target, unit)).join(' · ')}
             </div>
+            {s.note && <div className="ss nocap exnote-line" style={{ width: '100%' }}><Icon name="pencil" />{s.note}</div>}
           </div>)}
         </div>
       </>}
@@ -586,12 +588,12 @@ function ExercisePicker({ onPick, close }) {
   const [bp, setBp] = useState('')          // '' = all, '★' = chosen, else a body part
   const [eq, setEq] = useState('')          // '' = any equipment
   const [shown, setShown] = useState(50)
-  const ql = q.toLowerCase().trim()
+  const words = queryWords(q)
   const all = allExercises(st)
-  let base = all.filter(e =>
-    (bp === '★' ? usage[e.id] : (!bp || e.bp === bp)) &&
-    (!ql || e.n.toLowerCase().includes(ql) || e.tg.includes(ql) || e.eq.includes(ql) || (e.desc || '').toLowerCase().includes(ql)))
-  if (bp === '★') base = [...base].sort((a, b) => (usage[b.id] - usage[a.id]) || (a.n < b.n ? -1 : 1))
+  // Every word of the query, in any order; then what you have done before goes first under
+  // any tab, so a search or a body-part filter never buries your own exercises under the
+  // dataset's. See exercise-search.js.
+  const base = rankByUsage(all.filter(e => (bp === '★' ? usage[e.id] : (!bp || e.bp === bp)) && matchesQuery(e, words)), usage)
   const eqOpts = equipmentOf(base)
   // Drop the equipment filter if the search narrowed it away, so you never hit a dead end.
   const eqOn = eqOpts.includes(eq) ? eq : ''
@@ -927,7 +929,8 @@ function WorkoutDetail({ w, close }) {
       return <div key={i} className="row" style={{ marginBottom: 12, alignItems: 'flex-start' }}>
         {ex && <Thumb ex={ex} />}
         <div className="grow"><div className="tt capitalize" style={{ fontWeight: 600 }}>{ex ? ex.n : (e.n || e.id)} {w.prs && w.prs.includes(e.id) && <span className="pr"><Icon name="trophy" />PR</span>}</div>
-          <div className="ss">{e.sets.filter(s => s.done).map(s => setLabel(e.id, s, e.target)).join('  ·  ') || t('no sets')}</div></div>
+          <div className="ss">{e.sets.filter(s => s.done).map(s => setLabel(e.id, s, e.target)).join('  ·  ') || t('no sets')}</div>
+          {e.note && <div className="ss exnote-line"><Icon name="pencil" />{e.note}</div>}</div>
       </div>
     })}
     <Button variant="danger" onClick={() => confirmSheet({ title: t('Delete workout?'), message: t('This removes it from your history for good.'), confirmText: t('Delete'), danger: true, onConfirm: () => { update(s => { s.workouts = s.workouts.filter(x => x.id !== w.id) }); close(); toast(t('Workout deleted')) } })}>{t('Delete workout')}</Button>
@@ -1020,9 +1023,10 @@ function TopWeight({ entryIdx, close }) {
   // to sit after every one of them.
   const entry = A ? A.entries[entryIdx] : null
   const ex = entry && EXIDX[entry.id]
-  const maxSet = entry ? Math.max(0, ...entry.sets.filter(s => s.done).map(s => s.w || 0)) : 0
-  const prevBest = entry ? Math.max((st.exWeights[entry.id] || {}).w || 0, bestWeightFor(st, entry.id)) : 0
-  const [v, setV] = useState(entry ? (Math.max(maxSet, prevBest) || entry.target.weight || 0) : 0)
+  // Proposes today's heaviest set in the unit the column above is headed in, never the old
+  // record — see top-weight.js for why prefilling the record was a bug and not a convenience.
+  const { unit: wu, prevBest, value, record } = entry ? topWeightProposal(st, entry) : { unit: st.unit, prevBest: 0, value: 0, record: false }
+  const [v, setV] = useState(value)
   useEffect(() => { if (!entry) close() }, [!entry])
 
   const units = supersetUnits(A ? A.entries : [])
@@ -1036,22 +1040,26 @@ function TopWeight({ entryIdx, close }) {
     const n = Math.round((v || 0) * 10) / 10
     if (!isFinite(n) || n < 0) { toast(t('Enter a valid weight')); return }
     update(s => {
+      // topW is kept in the unit of the sets beside it — that is how bestWeightForEntry
+      // reads it back. exWeights is a profile-unit number, which is how buildSets seeds
+      // from it, so the same confirmation is stored twice in two units on purpose.
+      // Set, not raised: this is the weight you asked to open on next time. A ratchet here
+      // meant one mistyped confirmation could never be walked back.
       s.active.entries[entryIdx].topW = n
-      const cur = s.exWeights[entry.id]
-      s.exWeights[entry.id] = { w: Math.max(n, cur ? cur.w : 0), d: todayISO() }
+      s.exWeights[entry.id] = { w: confirmedBase(s, entry, n), d: todayISO() }
     })
     close()
     if (advance && unitDone) {
       if (isLastUnit) workoutCompleteSheet()               // whole workout done → finish/continue prompt
       else update(s => { s.active.cur = units[unitIdx + 1][0] })
-    } else toast(t('Tracked — next time starts at {0}', fmtNum(S().exWeights[entry.id].w) + ' ' + st.unit))
+    } else toast(t('Tracked — next time starts at {0}', fmtNum(convert(S().exWeights[entry.id].w, baseUnit(st), wu)) + ' ' + wu))
   }
   return <>
     <h3 className="capitalize row" style={{ gap: 8 }}><Icon name="checkCircle" style={{ color: 'var(--acc)' }} />{t('{0} done', ex.n)}</h3>
-    <div className="muted small">{t('Confirm the weight you worked with — your highest becomes the default next time.')}{!unitDone && unit.length > 1 ? ' ' + t('Then finish the superset partner.') : ''}</div>
-    <WeightInput value={v} setValue={setV} unit={st.unit} />
+    <div className="muted small">{t('Confirm the weight you worked with — it becomes the default next time.')}{!unitDone && unit.length > 1 ? ' ' + t('Then finish the superset partner.') : ''}</div>
+    <WeightInput value={v} setValue={setV} unit={wu} />
     <div style={{ height: 10 }} />
-    {prevBest > 0 ? <div className="small dim" style={{ textAlign: 'center', marginBottom: 12 }}>{t('Previous best:')} {fmtNum(prevBest)} {st.unit}{maxSet > prevBest && <span style={{ color: 'var(--yellow)' }}> — {t('new record!')}</span>}</div> : <div style={{ height: 4 }} />}
+    {prevBest > 0 ? <div className="small dim" style={{ textAlign: 'center', marginBottom: 12 }}>{t('Previous best:')} {fmtNum(prevBest)} {wu}{record && <span style={{ color: 'var(--yellow)' }}> — {t('new record!')}</span>}</div> : <div style={{ height: 4 }} />}
     {unitDone ? <>
       <Button variant="primary" trailingIcon={isLastUnit ? null : 'chevronRight'} onClick={() => commit(true)}>{isLastUnit ? t('Save') : t('Save & next exercise')}</Button>
       <div style={{ height: 8 }} /><Button variant="ghost" className="dim" onClick={() => commit(false)}>{t('Just close')}</Button>
@@ -1059,6 +1067,33 @@ function TopWeight({ entryIdx, close }) {
   </>
 }
 export const topWeightSheet = entryIdx => ui().openSheet(close => <TopWeight entryIdx={entryIdx} close={close} />)
+
+// A note on one exercise of the session in progress — seat position, grip, how it felt.
+// It is saved with the entry when the workout finishes and read back from the exercise's
+// history, so the thing you wanted to remember is there the next time you load the bar.
+function NoteSheet({ entryIdx, close }) {
+  const st = useStore(s => s.S)
+  const entry = st.active ? st.active.entries[entryIdx] : null
+  const [v, setV] = useState(entry?.note || '')
+  // Same defensive shape as TopWeight: the workout can end underneath an open sheet.
+  useEffect(() => { if (!entry) close() }, [!entry])
+  if (!entry) return null
+  const save = () => {
+    const n = v.trim()
+    // An emptied note drops the key rather than storing "", so the entry carries only what
+    // was actually written — in the session, in history and in a backup.
+    update(s => { const e = s.active?.entries[entryIdx]; if (!e) return; if (n) e.note = n; else delete e.note })
+    close()
+  }
+  return <>
+    <h3 className="capitalize row" style={{ gap: 8 }}><Icon name="pencil" style={{ color: 'var(--acc)' }} />{exOr(entry.id).n}</h3>
+    <textarea className="input" rows={4} maxLength={1000} autoFocus placeholder={t('Anything to remember next time — seat position, grip, how it felt.')}
+      value={v} onChange={e => setV(e.target.value)} />
+    <div style={{ height: 14 }} />
+    <Button variant="primary" onClick={save}>{t('Save note')}</Button>
+  </>
+}
+export const noteSheet = entryIdx => ui().openSheet(close => <NoteSheet entryIdx={entryIdx} close={close} />)
 
 // Shown when the last exercise's last set is checked — finish, or keep going.
 function WorkoutComplete({ close }) {
@@ -1110,7 +1145,8 @@ function doFinishWorkout() {
   const prs = []
   const e1prs = []
   A.entries.forEach(e => {
-    const mx = Math.max(0, ...e.sets.filter(s => s.done && !isWarmupRow(s)).map(s => s.w))
+    // Profile unit on both sides: a bare set.w here called 135 lb a PR over 65 kg.
+    const mx = sessionMax(st, e)
     if (mx > 0 && mx > bestWeightFor(st, e.id)) prs.push(e.id)
     // A heavier estimate without a heavier top set is its own kind of progress —
     // same weight for more reps. Reported separately so it can't be read as a load PR.
@@ -1125,8 +1161,12 @@ function doFinishWorkout() {
   w.vol = workoutVolume(w, st)
   update(s => {
     w.entries.forEach(e => {
-      const mx = Math.max(0, ...e.sets.filter(x => x.done && !isWarmupRow(x)).map(x => x.w || 0), e.topW || 0)
-      if (mx > 0) { const cur = s.exWeights[e.id]; if (!cur || mx > cur.w) s.exWeights[e.id] = { w: mx, d: w.d } }
+      // exWeights is a profile-unit number (buildSets seeds from it as one); an lb entry
+      // used to land here unconverted and next session opened on 135 "kg". A confirmed
+      // weight sets it, an unconfirmed session only raises it — see nextDefault.
+      const cur = s.exWeights[e.id]
+      const next = nextDefault(s, e, cur?.w)
+      if (next > 0 && next !== cur?.w) s.exWeights[e.id] = { w: next, d: w.d }
     })
     s.workouts.push(w)
     s.active = null

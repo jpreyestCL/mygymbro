@@ -15,6 +15,21 @@ describe('completed workout boundary', () => {
     })
   })
 
+  it('persists a per-exercise note only when one was written', () => {
+    const active = {
+      id: 'active-1', d: '2026-08-08', start: 1000,
+      entries: [
+        { id: 'noted', sets: [{ done: true }], note: '  seat 4, wide grip  ' },
+        { id: 'blank', sets: [{ done: true }], note: '   ' },
+        { id: 'none', sets: [{ done: true }] },
+      ],
+    }
+    const completed = buildCompletedWorkout(active, { end: 2000 })
+    expect(completed.entries[0].note).toBe('seat 4, wide grip')
+    expect(completed.entries[1]).not.toHaveProperty('note')
+    expect(completed.entries[2]).not.toHaveProperty('note')
+  })
+
   it('persists a muscle snapshot only when the caller supplies one', () => {
     const active = {
       id: 'active-1', d: '2026-08-08', start: 1000,

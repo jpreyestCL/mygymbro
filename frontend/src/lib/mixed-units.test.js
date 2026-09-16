@@ -35,9 +35,14 @@ describe('best weight', () => {
     const s = S({ workouts: [workout('2026-01-01', [KG_SET]), workout('2026-01-08', [LB_SET])] })
     expect(bestWeightFor(s, 'X')).toBe(61.23)
   })
-  it('reads a confirmed working weight in the unit its entry was logged in', () => {
-    const s = S({ workouts: [{ d: '2026-01-01', entries: [{ id: 'X', sets: [LB_SET], topW: 140 }] }] })
+  it('reads a legacy confirmed working weight in the unit its entry was logged in', () => {
+    // Only the rows without a load fall back to topW — see the loaded case below.
+    const s = S({ workouts: [{ d: '2026-01-01', entries: [{ id: 'X', sets: [{ ...LB_SET, w: 0 }], topW: 140 }] }] })
     expect(bestWeightFor(s, 'X')).toBeCloseTo(63.5, 1)   // 140 lb, not 140 kg
+  })
+  it('a confirmed weight above the logged sets is a slip, not a record', () => {
+    const s = S({ workouts: [{ d: '2026-01-01', entries: [{ id: 'X', sets: [LB_SET], topW: 140 }] }] })
+    expect(bestWeightFor(s, 'X')).toBe(61.23)             // the 135 lb set, not the 140 topW
   })
 })
 

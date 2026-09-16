@@ -175,8 +175,12 @@ Rough, community-driven — ideas and PRs welcome:
 - [x] Importers from FitNotes / Strong / Hevy (including the RPE they record), and body weight from Apple Health
 - [x] Effort per set — RIR or RPE, whichever scale you think in
 - [ ] Body measurements (waist, arms…) alongside weight
-- [ ] Per-exercise notes & plate calculator
+- [x] Per-exercise notes — written on the exercise during the workout, saved with that session, shown in the exercise's history and as "last note" the next time you do it
+- [ ] Plate calculator
 - [ ] Exercise instructions in German & Portuguese (UI is translated; upstream dataset doesn't ship these yet)
+- [x] Exercise picker: exercises you have already done (in a routine or a logged workout) always come first, then the ones you have never used — under every body-part/equipment filter and every search, not only the "Chosen" tab
+- [x] Exercise search matches every word of the query in any order ("row cable" finds "Cable Row"), instead of the query as one contiguous string
+- [x] Clean up the working-weight ratchet: `exWeights` only ever went up, so a mistyped confirmation (or a `topW` written back from the old prefill) stuck as the exercise's "previous best" forever. Confirming a weight now sets it rather than only raising it, and a stored `topW` above the entry's logged sets is ignored when reading history
 
 ## Tech
 

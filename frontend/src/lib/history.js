@@ -169,7 +169,9 @@ export function lastEntryFor(S, exId) {
     // `target` is what the session prescribed; finished workouts carry it so labels and the
     // progression engine can read a session back the way it was logged. Older workouts have
     // none — modeOf() falls back to the body part for them, which is what they were.
-    if (en && en.sets.some(s => s.done)) return { d: S.workouts[i].d, sets: en.sets.filter(s => s.done), target: en.target || null }
+    // The note rides along only when there is one, so callers comparing this shape see
+    // exactly what they saw before notes existed.
+    if (en && en.sets.some(s => s.done)) return { d: S.workouts[i].d, sets: en.sets.filter(s => s.done), target: en.target || null, ...(en.note ? { note: en.note } : {}) }
   }
   return null
 }
@@ -477,8 +479,11 @@ export function bestWeightForEntry(entry = {}, S) {
   const u = (entry.sets || []).find(x => x.u)?.u
   const topWeight = entry.topW == null ? NaN : (S ? wBase(S, { w: entry.topW, u }) : Number(entry.topW))
   // topW predates phase-tagged warm-ups. It remains a fallback for legacy all-work records,
-  // but cannot override resolved work rows once any warm-up marker exists.
+  // but cannot override resolved work rows once any warm-up marker exists — nor once any
+  // work row carries a load. The rows are what was lifted; a topW above them is a slip in
+  // the confirm sheet (its old prefill wrote the all-time record back as today's), and
+  // letting it win made that slip the exercise's best for good.
   if (parentMode === 'reps' && !hasNonRepsWorkRow && !hasWarmupRow
-    && Number.isFinite(topWeight) && topWeight > best) best = topWeight
+    && best === 0 && Number.isFinite(topWeight) && topWeight > 0) best = topWeight
   return best
 }

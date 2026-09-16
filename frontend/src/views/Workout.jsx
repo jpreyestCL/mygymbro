@@ -12,7 +12,7 @@ import { api } from '../lib/api.js'
 import { setProgressHighWater, supersetFlowStep } from '../lib/supersetFlow.js'
 import { isWarmupRow } from '../lib/workout-model.js'
 import Media from '../components/Media.jsx'
-import { startFlow, exercisePicker, exConfigSheet, exerciseDetailSheet, exerciseHistorySheet, topWeightSheet, finishWorkout, workoutCompleteSheet, confirmSheet } from '../sheets.jsx'
+import { startFlow, exercisePicker, exConfigSheet, exerciseDetailSheet, exerciseHistorySheet, noteSheet, topWeightSheet, finishWorkout, workoutCompleteSheet, confirmSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Button, Check, NumberField, Segmented } from '../components/ui.jsx'
 import { nextPrescription, applyPrescription } from '../lib/progression.js'
@@ -71,10 +71,11 @@ function ExerciseBlock({ entryIdx, compact, onToggle, onField, onAddSet, onRemov
   const exUnit = unitForEx(S, entry.id)
   const inExUnit = w => wIn(S, { w, u: baseUnit(S) }, exUnit)
   // The same number the "confirm your working weight" sheet calls your best, so the two
-  // never disagree inside one session: heaviest logged set, or the working weight you kept.
+  // never disagree inside one session: the heaviest set ever logged. Not the working weight
+  // you kept in exWeights — that is a default for next time, not something you lifted.
   // bestWeightFor answers in the profile's unit so it can be compared across the app; this
   // screen shows it in the exercise's.
-  const best = cardio ? 0 : Math.max(bestWeightFor(S, entry.id), (S.exWeights[entry.id] || {}).w || 0)
+  const best = cardio ? 0 : bestWeightFor(S, entry.id)
   // What the progression policy decided for this session, and why (issue #17). Computed when
   // the session was built so the reason matches the numbers already in the rows.
   const plan = entry.plan
@@ -144,8 +145,15 @@ function ExerciseBlock({ entryIdx, compact, onToggle, onField, onAddSet, onRemov
       <button className="tag btn-tag" onClick={() => exerciseHistorySheet(entry.id)}>
         <Icon name="chart" />{t('History')}
       </button>
+      <button className="tag btn-tag" onClick={() => noteSheet(entryIdx)}>
+        <Icon name="pencil" />{t('Note')}
+      </button>
     </div>
     {last && <div className="small dim" style={{ marginBottom: 4 }}>{t('Last time')} ({fmtDate(last.d)}): {last.sets.map(s => setLabelIn(S, entry.id, s, last.target, exUnit)).join(', ')}</div>}
+    {/* Last session's note is the reason notes exist ("seat 4"), so it is in view before the
+        first set, not behind the History button. Hidden once today's note says the same. */}
+    {last?.note && last.note !== entry.note && <div className="small dim exnote-line" style={{ marginBottom: 4 }}><Icon name="pencil" />{t('Last note')} ({fmtDate(last.d)}): {last.note}</div>}
+    {entry.note && <div className="small exnote-line" style={{ marginBottom: 4 }}><Icon name="pencil" style={{ color: 'var(--acc)' }} />{entry.note}</div>}
     {plan && plan.why && plan.kind !== 'off' && <div className={'progline' + (plan.kind === 'deload' ? ' warn' : '')}>
       <Icon name={plan.kind === 'up' ? 'arrowUp' : plan.kind === 'deload' ? 'arrowDown' : 'lightbulb'} />
       <span>{t(...plan.why)}</span>
