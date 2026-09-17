@@ -12,7 +12,7 @@ import { starterRoutines } from './lib/starter.js'
 import Media, { Thumb } from './components/Media.jsx'
 import Stepper from './components/Stepper.jsx'
 import Icon from './components/Icon.jsx'
-import { Button, Slider, Switch, Segmented, SelectRow, Row } from './components/ui.jsx'
+import { Button, Slider, Switch, Segmented, SelectRow, Row, Check } from './components/ui.jsx'
 import { glyphOf, GLYPH_GROUPS, DEFAULT_GLYPH } from './lib/glyphs.js'
 import BodyMap from './components/BodyMap.jsx'
 import { loadOfWorkouts, exerciseMuscleSnapshot } from './lib/muscles.js'
@@ -23,6 +23,7 @@ import { estimate1RM, best1RM, bestSetOf, is1RMRecord, REP_CAP } from './lib/one
 import { unitForEx, convert, baseUnit } from './lib/units.js'
 import { topWeightProposal, confirmedBase, sessionMax, nextDefault } from './lib/top-weight.js'
 import { queryWords, matchesQuery, rankByUsage } from './lib/exercise-search.js'
+import { routineFromWorkout } from './lib/routine-from-workout.js'
 import { healthWriteWeight, healthReadWeights, healthAuthorize, healthAvailable } from './lib/native.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS } from './lib/progression.js'
 import { MOBILE, shareExport } from './lib/mobile.js'
@@ -933,10 +934,56 @@ function WorkoutDetail({ w, close }) {
           {e.note && <div className="ss exnote-line"><Icon name="pencil" />{e.note}</div>}</div>
       </div>
     })}
+    {w.entries.length > 0 && <><Button variant="tinted" icon="clipboard" onClick={() => { close(); saveAsRoutineSheet(w) }}>{t('Save as routine')}</Button><div style={{ height: 8 }} /></>}
     <Button variant="danger" onClick={() => confirmSheet({ title: t('Delete workout?'), message: t('This removes it from your history for good.'), confirmText: t('Delete'), danger: true, onConfirm: () => { update(s => { s.workouts = s.workouts.filter(x => x.id !== w.id) }); close(); toast(t('Workout deleted')) } })}>{t('Delete workout')}</Button>
   </>
 }
 export const workoutDetailSheet = w => ui().openSheet(close => <WorkoutDetail w={w} close={close} />)
+
+/* ============================ save a past workout as a routine ============================ */
+// Everything starts picked: the common case is "that day was good, keep it", and unticking the
+// odd exercise is less work than ticking all of them. The plan each exercise gets is decided in
+// routine-from-workout.js; this sheet only chooses which ones and what to call it.
+function SaveAsRoutine({ w, close }) {
+  const [picked, setPicked] = useState(() => new Set(w.entries.map((_, i) => i)))
+  const [name, setName] = useState(w.name || '')
+  const all = picked.size === w.entries.length
+  const toggle = i => setPicked(p => { const n = new Set(p); n.has(i) ? n.delete(i) : n.add(i); return n })
+  const save = () => {
+    if (!picked.size) { toast(t('Pick at least one exercise')); return }
+    const r = routineFromWorkout(w, [...picked], { id: uid(), name: name.trim() || t('New routine'), emoji: DEFAULT_GLYPH })
+    update(s => { s.routines.push(r) })
+    close()
+    toast(t('Routine “{0}” created', r.name))
+    // Straight into the editor, like a routine made from Plan: weights, order and the weekday
+    // are one tap away there, and nothing here needs to duplicate that screen.
+    nav('/plan/r/' + r.id)
+  }
+  return <>
+    <h3>{t('Save as routine')}</h3>
+    <div className="muted small" style={{ marginBottom: 12 }}>{t('Pick the exercises from {0} to keep as a routine. Sets and reps come from that session.', fmtDate(w.d, true))}</div>
+    <input className="input" placeholder={t('Routine name')} value={name} onChange={e => setName(e.target.value)} maxLength={60} />
+    <div className="row between" style={{ margin: '14px 0 6px' }}>
+      <span className="small muted">{t('{0} of {1} selected', picked.size, w.entries.length)}</span>
+      <Button size="sm" onClick={() => setPicked(all ? new Set() : new Set(w.entries.map((_, i) => i)))}>{all ? t('Select none') : t('Select all')}</Button>
+    </div>
+    <div className="list">
+      {w.entries.map((e, i) => {
+        const ex = EXIDX[e.id]
+        return <div key={i} className="item" onClick={() => toggle(i)}>
+          {/* The row takes the tap; the box only shows it, or one tap would toggle twice. */}
+          <Check checked={picked.has(i)} onChange={() => {}} />
+          {ex && <Thumb ex={ex} />}
+          <div className="grow"><div className="tt capitalize">{ex ? ex.n : (e.n || e.id)}</div>
+            <div className="ss">{e.sets.filter(s => s.done).map(s => setLabel(e.id, s, e.target)).join('  ·  ') || t('no sets')}</div></div>
+        </div>
+      })}
+    </div>
+    <div style={{ height: 14 }} />
+    <Button variant="primary" onClick={save} disabled={!picked.size}>{t('Save routine')}</Button>
+  </>
+}
+export const saveAsRoutineSheet = w => ui().openSheet(close => <SaveAsRoutine w={w} close={close} />)
 
 /* ============================ calendar ============================ */
 function Calendar({ start, close }) {

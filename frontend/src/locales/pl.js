@@ -731,4 +731,13 @@ export default {
   "Leave guest mode?": "Wyjść z trybu gościa?",
   "Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.": "Wrócisz do ekranu logowania. Treningi zapisane na tym urządzeniu zostaną tutaj i będą czekać, jeśli znów wejdziesz jako gość.",
   "Guest mode — this device’s data is not synced to any profile.": "Tryb gościa — dane tego urządzenia nie są synchronizowane z żadnym profilem.",
+  "Save as routine": "Zapisz jako plan treningowy",
+  "Pick at least one exercise": "Wybierz co najmniej jedno ćwiczenie",
+  "Routine “{0}” created": "Plan treningowy „{0}” utworzony",
+  "Pick the exercises from {0} to keep as a routine. Sets and reps come from that session.": "Wybierz ćwiczenia z {0}, które chcesz zachować jako plan treningowy. Serie i powtórzenia pochodzą z tego treningu.",
+  "Routine name": "Nazwa planu treningowego",
+  "{0} of {1} selected": "Wybrano {0} z {1}",
+  "Select none": "Odznacz wszystkie",
+  "Select all": "Zaznacz wszystkie",
+  "Save routine": "Zapisz plan treningowy",
 }

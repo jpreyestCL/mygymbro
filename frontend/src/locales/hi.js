@@ -731,4 +731,13 @@ export default {
   "Leave guest mode?": "अतिथि मोड छोड़ें?",
   "Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.": "आप साइन-इन स्क्रीन पर लौट आएंगे। इस डिवाइस पर सहेजे गए वर्कआउट यहीं रहेंगे और दोबारा अतिथि के रूप में जारी रखने पर मिल जाएंगे।",
   "Guest mode — this device’s data is not synced to any profile.": "अतिथि मोड — इस डिवाइस का डेटा किसी प्रोफ़ाइल से सिंक नहीं होता।",
+  "Save as routine": "रूटीन के रूप में सहेजें",
+  "Pick at least one exercise": "कम से कम एक एक्सरसाइज़ चुनें",
+  "Routine “{0}” created": "रूटीन “{0}” बन गया",
+  "Pick the exercises from {0} to keep as a routine. Sets and reps come from that session.": "{0} की वे एक्सरसाइज़ चुनें जिन्हें रूटीन के रूप में रखना है। सेट और रेप्स उसी सेशन से लिए जाते हैं।",
+  "Routine name": "रूटीन का नाम",
+  "{0} of {1} selected": "{1} में से {0} चुने गए",
+  "Select none": "कोई नहीं चुनें",
+  "Select all": "सभी चुनें",
+  "Save routine": "रूटीन सहेजें",
 }

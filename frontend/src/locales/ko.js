@@ -731,4 +731,13 @@ export default {
   "Leave guest mode?": "게스트 모드를 종료할까요?",
   "Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.": "로그인 화면으로 돌아갑니다. 이 기기에 저장된 운동 기록은 그대로 남아 있으며, 다시 게스트로 계속하면 그대로 있습니다.",
   "Guest mode — this device’s data is not synced to any profile.": "게스트 모드 — 이 기기의 데이터는 어떤 프로필과도 동기화되지 않습니다.",
+  "Save as routine": "루틴으로 저장",
+  "Pick at least one exercise": "운동을 하나 이상 선택하세요",
+  "Routine “{0}” created": "루틴 “{0}” 생성됨",
+  "Pick the exercises from {0} to keep as a routine. Sets and reps come from that session.": "{0}의 운동 중 루틴으로 저장할 것을 선택하세요. 세트와 반복 횟수는 그 세션에서 가져옵니다.",
+  "Routine name": "루틴 이름",
+  "{0} of {1} selected": "{1}개 중 {0}개 선택됨",
+  "Select none": "모두 해제",
+  "Select all": "모두 선택",
+  "Save routine": "루틴 저장",
 }

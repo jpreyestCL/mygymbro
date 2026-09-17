@@ -731,4 +731,13 @@ export default {
   "Leave guest mode?": "Выйти из гостевого режима?",
   "Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.": "Вы вернётесь на экран входа. Тренировки, сохранённые на этом устройстве, останутся здесь и будут ждать, если вы снова продолжите как гость.",
   "Guest mode — this device’s data is not synced to any profile.": "Гостевой режим — данные этого устройства не синхронизируются ни с одним профилем.",
+  "Save as routine": "Сохранить как программу",
+  "Pick at least one exercise": "Выберите хотя бы одно упражнение",
+  "Routine “{0}” created": "Программа «{0}» создана",
+  "Pick the exercises from {0} to keep as a routine. Sets and reps come from that session.": "Выберите упражнения за {0}, которые хотите сохранить как программу. Подходы и повторения берутся из этой тренировки.",
+  "Routine name": "Название программы",
+  "{0} of {1} selected": "Выбрано {0} из {1}",
+  "Select none": "Снять все",
+  "Select all": "Выбрать все",
+  "Save routine": "Сохранить программу",
 }

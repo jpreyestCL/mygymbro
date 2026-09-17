@@ -731,4 +731,13 @@ export default {
   "Leave guest mode?": "退出访客模式？",
   "Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.": "将返回登录界面。此设备上保存的训练会留在本地，若再次以访客身份继续，它们仍在。",
   "Guest mode — this device’s data is not synced to any profile.": "访客模式 — 此设备的数据不会同步到任何个人资料。",
+  "Save as routine": "保存为训练日",
+  "Pick at least one exercise": "请至少选择一个动作",
+  "Routine “{0}” created": "训练日“{0}”已创建",
+  "Pick the exercises from {0} to keep as a routine. Sets and reps come from that session.": "选择 {0} 的动作，保存为训练日。组数和次数取自那次训练。",
+  "Routine name": "训练日名称",
+  "{0} of {1} selected": "已选 {0}/{1}",
+  "Select none": "全不选",
+  "Select all": "全选",
+  "Save routine": "保存训练日",
 }

@@ -731,4 +731,13 @@ export default {
   "Leave guest mode?": "Misafir modundan çıkılsın mı?",
   "Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.": "Giriş ekranına dönersin. Bu cihazda kayıtlı antrenmanlar burada kalır ve tekrar misafir olarak devam edersen seni bekliyor olur.",
   "Guest mode — this device’s data is not synced to any profile.": "Misafir modu — bu cihazdaki veriler hiçbir profille eşitlenmiyor.",
+  "Save as routine": "Rutin olarak kaydet",
+  "Pick at least one exercise": "En az bir egzersiz seç",
+  "Routine “{0}” created": "“{0}” rutini oluşturuldu",
+  "Pick the exercises from {0} to keep as a routine. Sets and reps come from that session.": "{0} tarihindeki egzersizlerden rutin olarak saklamak istediklerini seç. Setler ve tekrarlar o antrenmandan gelir.",
+  "Routine name": "Rutin adı",
+  "{0} of {1} selected": "{1} içinden {0} seçildi",
+  "Select none": "Hiçbirini seçme",
+  "Select all": "Tümünü seç",
+  "Save routine": "Rutini kaydet",
 }

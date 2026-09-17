@@ -731,4 +731,13 @@ export default {
   "Leave guest mode?": "Sair do modo convidado?",
   "Takes you back to the sign-in screen. The workouts saved on this device stay here, and will be waiting if you continue as a guest again.": "Voltas ao ecrã de início de sessão. Os treinos guardados neste dispositivo ficam aqui e estarão à tua espera se voltares a entrar como convidado.",
   "Guest mode — this device’s data is not synced to any profile.": "Modo convidado — os dados deste dispositivo não sincronizam com nenhum perfil.",
+  "Save as routine": "Salvar como rotina",
+  "Pick at least one exercise": "Escolha pelo menos um exercício",
+  "Routine “{0}” created": "Rotina “{0}” criada",
+  "Pick the exercises from {0} to keep as a routine. Sets and reps come from that session.": "Escolha os exercícios de {0} para guardar como rotina. Séries e repetições vêm dessa sessão.",
+  "Routine name": "Nome da rotina",
+  "{0} of {1} selected": "{0} de {1} selecionados",
+  "Select none": "Desmarcar todos",
+  "Select all": "Marcar todos",
+  "Save routine": "Salvar rotina",
 }
