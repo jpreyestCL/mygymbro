@@ -76,5 +76,12 @@
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
 	<false/>
+	<!-- Answers TestFlight's export-compliance question for every build, which otherwise sits in
+	     "Missing Compliance" and never reaches testers. NO holds while the app's only crypto is
+	     exempt: the system's HTTPS and the SHA-256 in the social-login plugin's OAuth PKCE.
+	     Adding real encryption of user data (AES on stored files, an E2E channel) makes this
+	     a false declaration: revisit it before shipping anything like that. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
