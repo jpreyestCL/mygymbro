@@ -127,7 +127,9 @@ const started = await api('/v1/ciBuildRuns', {
     },
   }),
 })
-console.log('started ' + line(started))
+// started.data, not started: printing the envelope used to throw after the POST had already
+// gone through, so a rerun "after the crash" queued the same commit twice.
+console.log('started ' + line(started.data))
 
 if (flag('no-watch')) {
   console.log('not watching (--no-watch). Check later with --status.')
