@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { modeOf, isTimed, fmtSec, setLabel, defaultConfig, buildSets, exLine, workoutVolume, effortOf, stepEffort, capEffort, isBw, isPerSide, sideReps, repStep } from './history.js'
+import { modeOf, isTimed, fmtSec, setLabel, defaultConfig, buildSets, exLine, workoutVolume, effortOf, stepEffort, capEffort, isBw, isPerSide, sideReps, repStep, sessionCounts } from './history.js'
 import { EXDB } from './exercises.js'
 
 // Real ids out of the shipped catalogue, so the body-part fallback is exercised for real.
@@ -394,5 +394,16 @@ describe('workoutVolume', () => {
   it('leaves an unloaded bodyweight set at zero volume rather than inventing a number', () => {
     const w = { entries: [{ id: BW, target: { bodyweight: true }, sets: [{ w: 0, r: 20, done: true }] }] }
     expect(workoutVolume(w)).toBe(0)
+  })
+})
+
+describe('sessionCounts', () => {
+  it('counts workouts with a checked-off set, once per workout', () => {
+    const S = { workouts: [
+      { entries: [{ id: 'a', sets: [{ done: true }] }, { id: 'a', sets: [{ done: true }] }, { id: 'b', sets: [{ done: false }] }] },
+      { entries: [{ id: 'a', sets: [{ done: false }, { done: true }] }] },
+      { entries: [] },
+    ] }
+    expect(sessionCounts(S)).toEqual({ a: 2 })
   })
 })
