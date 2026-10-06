@@ -175,6 +175,18 @@ export function lastEntryFor(S, exId) {
   }
   return null
 }
+// How many sessions each exercise has been logged in, for the exercise picker. A session
+// counts only with at least one checked-off set — the same rule as the exercise history
+// sheet, so the number in the list matches the one you see when you open it — and a
+// workout counts once even if the exercise appears twice in it.
+export function sessionCounts(S) {
+  const n = {}
+  S.workouts.forEach(w => {
+    const seen = new Set()
+    w.entries.forEach(e => { if (!seen.has(e.id) && e.sets.some(s => s.done)) { seen.add(e.id); n[e.id] = (n[e.id] || 0) + 1 } })
+  })
+  return n
+}
 // Returns the best in the PROFILE's unit, so it can be compared with any other set in the
 // app. Callers showing it on an exercise screen convert it to that exercise's unit.
 export function bestWeightFor(S, exId) {
