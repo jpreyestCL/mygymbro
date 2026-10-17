@@ -33,6 +33,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
     }
 
+    // With the scene life cycle on (see SceneDelegate.swift) UIKit delivers URL opens and user
+    // activities to the scene, not here; SceneDelegate forwards them to the same proxy. These
+    // two stay so nothing depends on which path UIKit takes.
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         // Called when the app was launched with a url. Feel free to add additional processing here,
         // but if you want the App API to support tracking app url opens, make sure to keep this call
