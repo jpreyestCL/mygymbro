@@ -21,6 +21,8 @@
 //   node scripts/ios-build.mjs --branch dev    # build another branch
 //   node scripts/ios-build.mjs --no-watch      # start it and return
 //   node scripts/ios-build.mjs --status        # just show the latest runs
+//   node scripts/ios-build.mjs --distribute    # hand the newest successful build to the testers
+//   node scripts/ios-build.mjs --no-distribute # build, but leave it out of TestFlight
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -29,6 +31,7 @@ import path from 'node:path'
 const CONFIG = path.join(os.homedir(), '.appstoreconnect', 'config.json')
 const PRODUCT_NAME = 'MyGymBro'
 const WORKFLOW_NAME = 'Default'
+const GROUP_NAME = 'Team (Expo)'
 
 const args = process.argv.slice(2)
 const flag = name => args.includes('--' + name)
@@ -88,6 +91,56 @@ const line = b => `#${b.attributes.number}  ${b.attributes.executionProgress}`
   + `  ${(b.attributes.sourceCommit?.commitSha || '').slice(0, 8)}`
   + `  "${(b.attributes.sourceCommit?.message || '').split('\n')[0].slice(0, 60)}"`
 
+/* ---------- TestFlight ---------- */
+
+// Xcode Cloud's own "TestFlight Internal Testing" post-action is a console-only setting: the
+// API's workflow object carries no field for it, and a group with "automatic distribution" on
+// still did not pick builds up by itself. So distribution happens here — every successful build
+// this script watches is handed to the group, and `--distribute` does the same for a build a
+// push to main started. Without it a build sits at READY_FOR_BETA_TESTING, valid and invisible.
+async function betaGroup() {
+  const app = await api(`/v1/ciProducts/${product.id}/app`)
+  const groups = await api(`/v1/apps/${app.data.id}/betaGroups?limit=200`)
+  const group = groups.data.find(g => g.attributes.name === GROUP_NAME)
+  if (!group) throw new Error(`no beta group named "${GROUP_NAME}" — found: `
+    + groups.data.map(g => g.attributes.name).join(', '))
+  return group
+}
+
+// The build is not there the moment the run succeeds: Apple takes minutes to ingest and process
+// it, and a build that is still PROCESSING cannot be handed to a group. Waiting it out is the
+// whole job — failing here would leave a good build undelivered.
+async function buildOfRun(runId, { tries = 40, waitMs = 30_000 } = {}) {
+  for (let i = 0; i < tries; i++) {
+    const linked = await api(`/v1/ciBuildRuns/${runId}/builds?limit=1`).catch(() => ({ data: [] }))
+    const id = linked.data[0]?.id
+    if (id) {
+      const build = await api(`/v1/builds/${id}`)
+      if (build.data.attributes.processingState === 'VALID') return build.data
+      if (build.data.attributes.processingState === 'FAILED') {
+        throw new Error(`build ${build.data.attributes.version} failed processing at Apple`)
+      }
+    }
+    if (i === 0) console.log('  waiting for TestFlight to finish processing the build…')
+    await new Promise(r => setTimeout(r, waitMs))
+  }
+  return null
+}
+
+async function distribute(runId) {
+  const group = await betaGroup()
+  const build = await buildOfRun(runId)
+  if (!build) {
+    console.log(`  still processing — hand it to "${GROUP_NAME}" later with --distribute.`)
+    return
+  }
+  await api(`/v1/betaGroups/${group.id}/relationships/builds`, {
+    method: 'POST',
+    body: JSON.stringify({ data: [{ type: 'builds', id: build.id }] }),
+  })
+  console.log(`  build ${build.attributes.version} → ${GROUP_NAME}`)
+}
+
 const products = await api('/v1/ciProducts?limit=200')
 const product = products.data.find(p => p.attributes.name === PRODUCT_NAME)
 if (!product) throw new Error(`no Xcode Cloud product named "${PRODUCT_NAME}" — found: `
@@ -101,6 +154,16 @@ if (!workflow) throw new Error(`no workflow named "${WORKFLOW_NAME}" — found: 
 if (flag('status')) {
   const runs = await api(`/v1/ciWorkflows/${workflow.id}/buildRuns?limit=8&sort=-number`)
   runs.data.forEach(b => console.log(line(b)))
+  process.exit(0)
+}
+
+// For a build nobody watched: the push-triggered run that already finished.
+if (flag('distribute')) {
+  const runs = await api(`/v1/ciWorkflows/${workflow.id}/buildRuns?limit=8&sort=-number`)
+  const done = runs.data.find(r => r.attributes.completionStatus === 'SUCCEEDED')
+  if (!done) throw new Error('no successful build run to distribute')
+  console.log('distributing ' + line(done))
+  await distribute(done.id)
   process.exit(0)
 }
 
@@ -155,6 +218,7 @@ for (;;) {
   if (now !== last) { console.log('  ' + new Date().toTimeString().slice(0, 8) + '  ' + now); last = now }
   if (a.executionProgress === 'COMPLETE') {
     const ok = a.completionStatus === 'SUCCEEDED'
+    if (ok && !flag('no-distribute')) await distribute(id)
     console.log(ok
       ? `\ndone — build #${a.number} succeeded. It should appear in TestFlight shortly.`
       : `\nbuild #${a.number} finished ${a.completionStatus}. Open Xcode → Report navigator, or App Store Connect, for the logs.`)
