@@ -78,6 +78,13 @@ the loader and it hangs — silently, with no sheet and no error. Box it:
 `.then(m => ({ sl: m.SocialLogin }))`. A browser cannot reproduce this, because there the plugin
 is an ordinary object; `social.test.js` pins it instead.
 
+**The iOS app runs on the UIScene life cycle, and must.** iOS 27 kills any app built with its
+SDK that has no `UIApplicationSceneManifest` before the first frame (Apple TN3187) — the app
+crashed on launch on every phone that updated until `SceneDelegate.swift` landed. The window
+still comes from `Main.storyboard`; `SceneDelegate` exists to forward URL opens and user
+activities to `ApplicationDelegateProxy`, which UIKit stops sending to `AppDelegate` once scenes
+are on. Drop that forwarding and Google sign-in never returns to the app.
+
 ### State: one object `S`, synced whole
 
 All user data is a single serializable object `S` (shape and defaults in `DEF`,
