@@ -21,3 +21,16 @@ describe('fork additions to the catalogue', () => {
     }
   })
 })
+
+describe('media for the fork additions', () => {
+  it('ships its own files and does not point at the upstream CDN', async () => {
+    const { imgSrc, gifSrc } = await import('./exercises.js')
+    const ex = EXIDX.f0001
+    expect(imgSrc(ex)).toBe('/img/f0001.jpg')
+    expect(gifSrc(ex)).toBe('/gif/f0001.gif')
+    const { existsSync } = await import('node:fs')
+    const media = new URL('../../../media/', import.meta.url)
+    expect(existsSync(new URL('img/f0001.jpg', media))).toBe(true)
+    expect(existsSync(new URL('gif/f0001.gif', media))).toBe(true)
+  })
+})

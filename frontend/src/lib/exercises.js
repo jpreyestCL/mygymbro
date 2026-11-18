@@ -7,9 +7,9 @@ import { t } from './i18n-core.js'
 // Machines the upstream dataset has no entry for but real gyms do. They live here, not in
 // the generated exercises-data.js, so a dataset refresh cannot erase them — the same
 // reasoning as SECONDARY_ADDITIONS below. Ids carry an `f` prefix: the dataset's ids are
-// numeric and custom exercises use `c…`, so neither can ever collide with these. There is
-// no media for them; Media/Thumb already render an exercise without img/gif (as they do for
-// customs), and instrFor falls back to the English `st` for languages without a pack entry.
+// numeric and custom exercises use `c…`, so neither can ever collide with these. Their
+// media is drawn for this fork and committed in media/ (`own: true`, see imgSrc below), and
+// instrFor falls back to the English `st` for languages without a pack entry.
 const FORK_ADDITIONS = [
   {
     // Plate-loaded hip thrust machine (Booty Builder and similar): seated on a low pad, back
@@ -18,6 +18,7 @@ const FORK_ADDITIONS = [
     tg: 'glutes', mg: 'hamstrings', sm: ['hamstrings', 'quadriceps', 'adductors'],
     // The picker searches `desc` too, so the brand name people know it by finds it.
     desc: 'Plate-loaded hip thrust machine (e.g. Booty Builder).',
+    img: 'f0001.jpg', gif: 'f0001.gif', own: true,
     st: [
       'Load the plates, then sit on the low seat with your upper back against the bench pad.',
       'Place your feet flat on the platform about hip-width apart, knees bent.',
@@ -88,8 +89,13 @@ export const allExercises = st => [...(st.customEx || []), ...EXDB]
 const ENV = import.meta.env || {}
 const IMG_BASE = ENV.VITE_IMG_BASE || '/img/'
 const GIF_BASE = ENV.VITE_GIF_BASE || '/gif/'
-export const imgSrc = ex => IMG_BASE + ex.img
-export const gifSrc = ex => GIF_BASE + ex.gif
+// Media for the fork's own additions does not exist on the upstream CDN the mobile build
+// points IMG_BASE/GIF_BASE at, so it always comes from this app's own server, which serves
+// the checkout's media/. VITE_API_BASE is that server for the native app and unset on the
+// web, where the same-origin /img/ already is.
+const OWN_BASE = (ENV.VITE_API_BASE || '').replace(/\/$/, '')
+export const imgSrc = ex => (ex.own ? OWN_BASE + '/img/' : IMG_BASE) + ex.img
+export const gifSrc = ex => (ex.own ? OWN_BASE + '/gif/' : GIF_BASE) + ex.gif
 
 // Cardio exercises log time + speed instead of weight × reps.
 export const isCardio = idOrEx => (typeof idOrEx === 'string' ? EXIDX[idOrEx] : idOrEx)?.bp === 'cardio'
