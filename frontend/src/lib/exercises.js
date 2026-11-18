@@ -1,10 +1,36 @@
-import { EXDB } from './exercises-data.js'
+import { EXDB as DATASET } from './exercises-data.js'
 // i18n-core rather than i18n: this module is imported from plain Node by the MCP server,
 // where `import.meta.glob` does not exist. The core half carries `t` without the Vite-only
 // lazy loading.
 import { t } from './i18n-core.js'
 
-export { EXDB }
+// Machines the upstream dataset has no entry for but real gyms do. They live here, not in
+// the generated exercises-data.js, so a dataset refresh cannot erase them — the same
+// reasoning as SECONDARY_ADDITIONS below. Ids carry an `f` prefix: the dataset's ids are
+// numeric and custom exercises use `c…`, so neither can ever collide with these. There is
+// no media for them; Media/Thumb already render an exercise without img/gif (as they do for
+// customs), and instrFor falls back to the English `st` for languages without a pack entry.
+const FORK_ADDITIONS = [
+  {
+    // Plate-loaded hip thrust machine (Booty Builder and similar): seated on a low pad, back
+    // against a bench, a padded lever belted across the hips, feet on a platform.
+    id: 'f0001', n: 'lever hip thrust', bp: 'upper legs', eq: 'leverage machine',
+    tg: 'glutes', mg: 'hamstrings', sm: ['hamstrings', 'quadriceps', 'adductors'],
+    // The picker searches `desc` too, so the brand name people know it by finds it.
+    desc: 'Plate-loaded hip thrust machine (e.g. Booty Builder).',
+    st: [
+      'Load the plates, then sit on the low seat with your upper back against the bench pad.',
+      'Place your feet flat on the platform about hip-width apart, knees bent.',
+      'Position the padded lever across your hips and fasten the belt.',
+      'Drive through your heels and squeeze your glutes to push your hips up until your torso is in line with your thighs.',
+      'Pause at the top, keeping your chin tucked and ribs down.',
+      'Lower your hips under control to the starting position.',
+      'Repeat for the desired number of repetitions.',
+    ],
+  },
+]
+
+export const EXDB = [...DATASET, ...FORK_ADDITIONS]
 
 // The generated dataset already supplies secondary muscles for most exercises. Keep the
 // handful of conservative catalogue additions that are useful to the muscle map here so a
