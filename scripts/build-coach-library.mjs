@@ -19,12 +19,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = join(root, 'frontend', 'src', 'lib', 'exercises-data.js');
+// exercises.js, not exercises-data.js: it appends the fork's additions to the dataset, and
+// the API must accept their ids too.
+const src = join(root, 'frontend', 'src', 'lib', 'exercises.js');
 const out = join(root, 'api', 'coach', 'library.json');
 
 const { EXDB } = await import(pathToFileURL(src).href);
 const index = EXDB.map(e => ({ id: e.id, n: e.n, bp: e.bp, tg: e.tg, eq: e.eq }));
-const json = JSON.stringify({ generated_from: 'frontend/src/lib/exercises-data.js', count: index.length, exercises: index }) + '\n';
+const json = JSON.stringify({ generated_from: 'frontend/src/lib/exercises.js', count: index.length, exercises: index }) + '\n';
 
 if (process.argv.includes('--check')) {
   let current = null;
